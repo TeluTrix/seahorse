@@ -33,18 +33,26 @@ var browserCompatibleAudioCodecs = map[string]bool{
 	"pcm_u8":    true,
 }
 
-// probeTimeout is generous even though ffprobe only reads header/stream
-// metadata (not the whole file) — it should never legitimately take this
-// long, so hitting this timeout means something is actually wrong (e.g. an
-// unreachable network mount), not just a big file.
-const probeTimeout = 30 * time.Second
-
-// remuxTimeout bounds a single audio remux. This is a stream copy for
-// video (no re-encoding), but it still has to read and write the entire
-// file, which can take a while for a large 4K file over slow/network
-// storage — generous on purpose, but bounded so one problem file can't
-// block scanning indefinitely.
-const remuxTimeout = 60 * time.Minute
+// Options bundles the tunables for NeedsAudioRemux/RemuxAudio, sourced from
+// config.Config so an operator can adjust them per-deployment (e.g. a longer
+// RemuxTimeout for large files over slow network storage) without a rebuild.
+type Options struct {
+	// ProbeTimeout bounds ffprobe calls (codec/duration checks). Generous
+	// even though ffprobe only reads header/stream metadata — it should
+	// never legitimately take long, so hitting this means something is
+	// genuinely wrong (e.g. an unreachable network mount), not just a big
+	// file.
+	ProbeTimeout time.Duration
+	// RemuxTimeout bounds a single audio remux. This is a stream copy for
+	// video (no re-encoding), but it still has to read and write the entire
+	// file, which can take a while for a large 4K file over slow/network
+	// storage — bounded so one problem file can't block scanning
+	// indefinitely.
+	RemuxTimeout time.Duration
+	// AudioBitrate is the AAC bitrate used for the re-encoded audio track,
+	// e.g. "192k".
+	AudioBitrate string
+}
 
 // RemuxedPath returns the deterministic sibling path used to cache an
 // audio-fixed copy of videoPath, e.g. "Movie.mp4" -> "Movie.audiofix.mp4".
@@ -57,12 +65,12 @@ func RemuxedPath(videoPath string) string {
 // NeedsAudioRemux reports whether videoPath's first audio stream uses a
 // codec no browser can decode natively. Returns false (nothing to do) if
 // there's no audio stream at all, or ffmpeg isn't installed.
-func NeedsAudioRemux(videoPath string) (bool, error) {
+func NeedsAudioRemux(videoPath string, opts Options) (bool, error) {
 	if !ffmpeg.Available() {
 		return false, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), opts.ProbeTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "ffprobe",
@@ -75,7 +83,7 @@ func NeedsAudioRemux(videoPath string) (bool, error) {
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
-		return false, fmt.Errorf("ffprobe failed (or timed out after %s): %w", probeTimeout, err)
+		return false, fmt.Errorf("ffprobe failed (or timed out after %s): %w", opts.ProbeTimeout, err)
 	}
 
 	var parsed struct {
@@ -97,8 +105,8 @@ func NeedsAudioRemux(videoPath string) (bool, error) {
 // determined (e.g. ffprobe missing/fails) — callers treat 0 as "no progress
 // percentage available" rather than an error, since duration is only needed
 // for the optional progress callback, not for the remux itself.
-func probeDuration(videoPath string) float64 {
-	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+func probeDuration(videoPath string, timeout time.Duration) float64 {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "ffprobe",
@@ -170,7 +178,7 @@ func watchProgress(r io.Reader, totalSeconds float64, onProgress func(percent fl
 // on success — otherwise a timed-out or killed run would leave a partial,
 // broken file sitting at the "done" path, which future scans would then
 // mistake for a completed remux and never retry.
-func RemuxAudio(videoPath string, onProgress func(percent float64)) error {
+func RemuxAudio(videoPath string, opts Options, onProgress func(percent float64)) error {
 	dest := RemuxedPath(videoPath)
 	if _, err := os.Stat(dest); err == nil {
 		return nil
@@ -184,7 +192,7 @@ func RemuxAudio(videoPath string, onProgress func(percent float64)) error {
 	tmpDest := strings.TrimSuffix(dest, destExt) + ".tmp" + destExt
 	defer os.Remove(tmpDest) // best-effort cleanup on any non-success exit path
 
-	ctx, cancel := context.WithTimeout(context.Background(), remuxTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), opts.RemuxTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx,
@@ -195,7 +203,7 @@ func RemuxAudio(videoPath string, onProgress func(percent float64)) error {
 		"-map", "0:a:0",
 		"-c:v", "copy",
 		"-c:a", "aac",
-		"-b:a", "192k",
+		"-b:a", opts.AudioBitrate,
 		"-progress", "pipe:1",
 		"-nostats",
 		tmpDest,
@@ -205,7 +213,7 @@ func RemuxAudio(videoPath string, onProgress func(percent float64)) error {
 
 	totalSeconds := 0.0
 	if onProgress != nil {
-		totalSeconds = probeDuration(videoPath)
+		totalSeconds = probeDuration(videoPath, opts.ProbeTimeout)
 	}
 
 	progressDone := make(chan struct{})
@@ -224,7 +232,7 @@ func RemuxAudio(videoPath string, onProgress func(percent float64)) error {
 
 	if err := cmd.Run(); err != nil {
 		<-progressDone
-		return fmt.Errorf("ffmpeg audio remux failed (or timed out after %s): %w: %s", remuxTimeout, err, stderr.String())
+		return fmt.Errorf("ffmpeg audio remux failed (or timed out after %s): %w: %s", opts.RemuxTimeout, err, stderr.String())
 	}
 	<-progressDone
 

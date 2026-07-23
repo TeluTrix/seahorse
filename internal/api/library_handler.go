@@ -14,7 +14,7 @@ import (
 )
 
 func (h *Handlers) ListMovies(w http.ResponseWriter, r *http.Request) {
-	page, pageSize := parsePagination(r)
+	page, pageSize := h.parsePagination(r)
 	order := "title"
 	if r.URL.Query().Get("sort") == "newest" {
 		order = "release_date DESC"
@@ -93,7 +93,7 @@ func (h *Handlers) GetMovie(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) ListTVShows(w http.ResponseWriter, r *http.Request) {
-	page, pageSize := parsePagination(r)
+	page, pageSize := h.parsePagination(r)
 	order := "title"
 	if r.URL.Query().Get("sort") == "newest" {
 		order = "first_air_date DESC"

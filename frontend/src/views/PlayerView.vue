@@ -2,8 +2,10 @@
 import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api, streamURL, subtitleURL, TOKEN_KEY } from '../api/client'
+import { useConfigStore } from '../stores/config'
 import type { MediaType, SubtitleTrack } from '../types'
 
+const config = useConfigStore()
 const route = useRoute()
 // Captured once, not as computed(): Vue Router's `route` is a single shared
 // reactive object, and it already reflects the *destination* route by the
@@ -55,7 +57,8 @@ function applyResumeIfReady() {
   const video = videoEl.value
   if (!video || restart) return
   if (video.readyState < 1 || !video.duration) return // HAVE_METADATA not reached yet
-  if (resumePosition > 5 && resumePosition < video.duration - 5) {
+  const threshold = config.resumeThresholdSeconds
+  if (resumePosition > threshold && resumePosition < video.duration - threshold) {
     video.currentTime = resumePosition
   }
 }
@@ -67,7 +70,7 @@ function onLoadedMetadata() {
 function onTimeUpdate() {
   const video = videoEl.value
   if (!video) return
-  if (video.currentTime - lastReported >= 10) {
+  if (video.currentTime - lastReported >= config.progressReportIntervalSeconds) {
     lastReported = video.currentTime
     report(video.currentTime, video.duration)
   }
@@ -99,16 +102,35 @@ onMounted(async () => {
 
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('beforeunload', reportOnUnload)
+  window.addEventListener('keydown', handleKeydown)
 })
 
 function handleVisibilityChange() {
   if (document.visibilityState === 'hidden') reportOnUnload()
 }
 
+// Left/Right arrow keys seek by config.playerSeekSeconds instead of the
+// browser's native (and inconsistent, e.g. Chrome's default is 5s) skip
+// amount. Listens on window rather than the video element since focus isn't
+// reliably on the video itself (e.g. right after a click on the page).
+function handleKeydown(e: KeyboardEvent) {
+  const target = e.target as HTMLElement | null
+  if (target && ['INPUT', 'TEXTAREA'].includes(target.tagName)) return
+
+  const video = videoEl.value
+  if (!video || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return
+
+  e.preventDefault()
+  const delta = e.key === 'ArrowLeft' ? -config.playerSeekSeconds : config.playerSeekSeconds
+  const duration = video.duration || Infinity
+  video.currentTime = Math.min(duration, Math.max(0, video.currentTime + delta))
+}
+
 onBeforeUnmount(() => {
   reportOnUnload()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('beforeunload', reportOnUnload)
+  window.removeEventListener('keydown', handleKeydown)
 })
 </script>
 

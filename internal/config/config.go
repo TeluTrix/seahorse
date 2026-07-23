@@ -4,18 +4,58 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	ListenOn         string
-	Port             string
-	DBPath           string
-	LibraryPath      string
-	TMDBAPIKey       string
-	JWTSecret        string
+	ListenOn    string
+	Port        string
+	DBPath      string
+	LibraryPath string
+	TMDBAPIKey  string
+	JWTSecret   string
+
 	RemuxConcurrency int
+
+	JWTTTL            time.Duration
+	TMDBTimeout       time.Duration
+	AudioProbeTimeout time.Duration
+	AudioRemuxTimeout time.Duration
+	AudioBitrate      string
+	CastLimit         int
+	MaxPageSize       int
+
+	// Values below are also served to the frontend via GET /api/config,
+	// since the frontend is a prebuilt static bundle and can't read these
+	// env vars directly.
+	DefaultPageSize               int
+	PlayerSeekSeconds             int
+	ResumeThresholdSeconds        int
+	ProgressReportIntervalSeconds int
+}
+
+// envInt reads key as a positive integer, falling back to def (with a
+// warning) if it's unset, invalid, or not positive.
+func envInt(key string, def int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		log.Printf("warning: invalid %s %q, defaulting to %d", key, raw, def)
+		return def
+	}
+	return n
+}
+
+func envString(key, def string) string {
+	if raw := os.Getenv(key); raw != "" {
+		return raw
+	}
+	return def
 }
 
 func Load() Config {
@@ -48,14 +88,20 @@ func Load() Config {
 		log.Fatal("SEAHORSE_LIBRARY_PATH must be set")
 	}
 
-	cfg.RemuxConcurrency = 1
-	if raw := os.Getenv("SEAHORSE_REMUX_CONCURRENCY"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-			cfg.RemuxConcurrency = n
-		} else {
-			log.Printf("warning: invalid SEAHORSE_REMUX_CONCURRENCY %q, defaulting to 1", raw)
-		}
-	}
+	cfg.RemuxConcurrency = envInt("SEAHORSE_REMUX_CONCURRENCY", 1)
+
+	cfg.JWTTTL = time.Duration(envInt("SEAHORSE_JWT_TTL_HOURS", 24)) * time.Hour
+	cfg.TMDBTimeout = time.Duration(envInt("SEAHORSE_TMDB_TIMEOUT_SECONDS", 10)) * time.Second
+	cfg.AudioProbeTimeout = time.Duration(envInt("SEAHORSE_AUDIO_PROBE_TIMEOUT_SECONDS", 30)) * time.Second
+	cfg.AudioRemuxTimeout = time.Duration(envInt("SEAHORSE_AUDIO_REMUX_TIMEOUT_MINUTES", 60)) * time.Minute
+	cfg.AudioBitrate = envString("SEAHORSE_AUDIO_BITRATE", "192k")
+	cfg.CastLimit = envInt("SEAHORSE_CAST_LIMIT", 15)
+	cfg.MaxPageSize = envInt("SEAHORSE_MAX_PAGE_SIZE", 200)
+
+	cfg.DefaultPageSize = envInt("SEAHORSE_DEFAULT_PAGE_SIZE", 48)
+	cfg.PlayerSeekSeconds = envInt("SEAHORSE_PLAYER_SEEK_SECONDS", 15)
+	cfg.ResumeThresholdSeconds = envInt("SEAHORSE_RESUME_THRESHOLD_SECONDS", 5)
+	cfg.ProgressReportIntervalSeconds = envInt("SEAHORSE_PROGRESS_REPORT_INTERVAL_SECONDS", 10)
 
 	return cfg
 }

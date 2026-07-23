@@ -131,6 +131,7 @@ type EpisodeDTO struct {
 	Title         string       `json:"title"`
 	Overview      string       `json:"overview"`
 	StillURL      string       `json:"still_url"`
+	Runtime       int          `json:"runtime_minutes,omitempty"`
 	Progress      *ProgressDTO `json:"progress,omitempty"`
 }
 
@@ -141,6 +142,7 @@ func toEpisodeDTO(e models.Episode, wp *models.WatchProgress) EpisodeDTO {
 		Title:         e.Title,
 		Overview:      e.Overview,
 		StillURL:      tmdb.ImageURL(e.StillPath, "w300"),
+		Runtime:       e.Runtime,
 		Progress:      toProgressDTO(wp),
 	}
 }

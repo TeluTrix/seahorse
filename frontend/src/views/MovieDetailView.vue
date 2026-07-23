@@ -4,9 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, coverURL } from '../api/client'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import CastList from '../components/CastList.vue'
+import { useConfigStore } from '../stores/config'
 import type { Movie } from '../types'
 import { formatRuntime, formatTime } from '../utils/format'
 
+const config = useConfigStore()
 const route = useRoute()
 const router = useRouter()
 const movie = ref<Movie | null>(null)
@@ -18,7 +20,7 @@ const posterUrl = computed(() => {
 
 const hasResumePoint = computed(() => {
   const p = movie.value?.progress
-  return !!p && !p.completed && p.position_seconds > 5
+  return !!p && !p.completed && p.position_seconds > config.resumeThresholdSeconds
 })
 
 onMounted(async () => {

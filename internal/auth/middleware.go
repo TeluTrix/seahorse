@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/TeluTrix/seahorse/internal/models"
 	"github.com/google/uuid"
@@ -18,14 +19,15 @@ const (
 
 type Authenticator struct {
 	Secret string
+	TTL    time.Duration
 }
 
-func New(secret string) *Authenticator {
-	return &Authenticator{Secret: secret}
+func New(secret string, ttl time.Duration) *Authenticator {
+	return &Authenticator{Secret: secret, TTL: ttl}
 }
 
 func (a *Authenticator) GenerateToken(userID uuid.UUID, role models.Role) (string, error) {
-	return GenerateToken(a.Secret, userID, role)
+	return GenerateToken(a.Secret, userID, role, a.TTL)
 }
 
 func (a *Authenticator) extractToken(r *http.Request) string {

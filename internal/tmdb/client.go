@@ -13,24 +13,24 @@ import (
 
 const baseURL = "https://api.themoviedb.org/3"
 
-// topCastLimit caps how many cast members are kept per movie/show, matching
-// the "top billed" cast section on an IMDb-style page rather than a full
-// credits dump.
-const topCastLimit = 15
-
 type Client struct {
 	apiKey      string
 	httpClient  *http.Client
 	movieGenres map[int]string
 	tvGenres    map[int]string
+	// castLimit caps how many cast members are kept per movie/show, matching
+	// the "top billed" cast section on an IMDb-style page rather than a full
+	// credits dump.
+	castLimit int
 }
 
-func New(apiKey string) *Client {
+func New(apiKey string, timeout time.Duration, castLimit int) *Client {
 	c := &Client{
 		apiKey:      apiKey,
-		httpClient:  &http.Client{Timeout: 10 * time.Second},
+		httpClient:  &http.Client{Timeout: timeout},
 		movieGenres: map[int]string{},
 		tvGenres:    map[int]string{},
+		castLimit:   castLimit,
 	}
 
 	c.loadGenres("/genre/movie/list", c.movieGenres)
@@ -66,6 +66,7 @@ type EpisodeResult struct {
 	Title         string
 	Overview      string
 	StillPath     string
+	Runtime       int // minutes; 0 if TMDB doesn't have it for this episode
 }
 
 func ImageURL(path string, size string) string {
@@ -222,6 +223,7 @@ func (c *Client) GetTVSeasonEpisodes(tvID, seasonNumber int) ([]EpisodeResult, e
 			Name          string `json:"name"`
 			Overview      string `json:"overview"`
 			StillPath     string `json:"still_path"`
+			Runtime       int    `json:"runtime"`
 		} `json:"episodes"`
 	}
 
@@ -237,6 +239,7 @@ func (c *Client) GetTVSeasonEpisodes(tvID, seasonNumber int) ([]EpisodeResult, e
 			Title:         e.Name,
 			Overview:      e.Overview,
 			StillPath:     e.StillPath,
+			Runtime:       e.Runtime,
 		})
 	}
 	return episodes, nil
@@ -287,9 +290,9 @@ func (c *Client) GetMovieDetails(id int) (*MovieDetails, error) {
 		}
 	}
 
-	cast := make([]CastMember, 0, topCastLimit)
+	cast := make([]CastMember, 0, c.castLimit)
 	for i, castMember := range data.Credits.Cast {
-		if i >= topCastLimit {
+		if i >= c.castLimit {
 			break
 		}
 		cast = append(cast, CastMember{
@@ -338,9 +341,9 @@ func (c *Client) GetTVDetails(id int) (*TVDetails, error) {
 		creators = append(creators, creator.Name)
 	}
 
-	cast := make([]CastMember, 0, topCastLimit)
+	cast := make([]CastMember, 0, c.castLimit)
 	for i, castMember := range data.AggregateCredits.Cast {
-		if i >= topCastLimit {
+		if i >= c.castLimit {
 			break
 		}
 		character := ""

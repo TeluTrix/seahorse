@@ -1,3 +1,13 @@
+// Runtime-tunable values served by GET /api/config (see api.ClientConfig on
+// the backend) — the frontend is a prebuilt static bundle, so it can't read
+// the server's env vars directly.
+export interface ClientConfig {
+  default_page_size: number
+  player_seek_seconds: number
+  resume_threshold_seconds: number
+  progress_report_interval_seconds: number
+}
+
 export type Role = 'user' | 'admin'
 
 export interface PublicUser {
@@ -46,6 +56,7 @@ export interface Episode {
   title: string
   overview: string
   still_url: string
+  runtime_minutes?: number
   progress?: Progress
 }
 

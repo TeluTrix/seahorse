@@ -69,18 +69,21 @@ type Scanner struct {
 	// wait for all its outstanding remux jobs to finish before reporting done.
 	remuxSlots chan struct{}
 	remuxWG    sync.WaitGroup
+
+	transcodeOpts transcode.Options
 }
 
 // New creates a Scanner. remuxConcurrency bounds how many audio remux jobs
 // (see transcode.RemuxAudio) run at once; callers should pass at least 1.
-func New(tmdbClient *tmdb.Client, remuxConcurrency int) *Scanner {
+func New(tmdbClient *tmdb.Client, remuxConcurrency int, transcodeOpts transcode.Options) *Scanner {
 	if remuxConcurrency < 1 {
 		remuxConcurrency = 1
 	}
 	return &Scanner{
-		tmdb:       tmdbClient,
-		status:     Status{State: "idle"},
-		remuxSlots: make(chan struct{}, remuxConcurrency),
+		tmdb:          tmdbClient,
+		status:        Status{State: "idle"},
+		remuxSlots:    make(chan struct{}, remuxConcurrency),
+		transcodeOpts: transcodeOpts,
 	}
 }
 
@@ -125,7 +128,7 @@ func (s *Scanner) queueRemux(path string) {
 		s.setRemuxProgress(base, 0)
 		defer s.clearRemuxJob(base)
 
-		if err := transcode.RemuxAudio(path, func(percent float64) {
+		if err := transcode.RemuxAudio(path, s.transcodeOpts, func(percent float64) {
 			s.setRemuxProgress(base, percent)
 		}); err != nil {
 			slog.Warn("could not remux incompatible audio", "file", path, "error", err)
@@ -443,7 +446,7 @@ func (s *Scanner) scanMovie(moviesRoot, folderName string) (bool, error) {
 		return false, err
 	}
 
-	if needsFix, err := transcode.NeedsAudioRemux(videoFile); err != nil {
+	if needsFix, err := transcode.NeedsAudioRemux(videoFile, s.transcodeOpts); err != nil {
 		slog.Warn("could not probe audio codec", "file", videoFile, "error", err)
 	} else if needsFix {
 		s.queueRemux(videoFile)
@@ -625,9 +628,10 @@ func (s *Scanner) scanSeason(show models.TVShow, seasonPath string, seasonNumber
 			episode.Title = meta.Title
 			episode.Overview = meta.Overview
 			episode.StillPath = meta.StillPath
+			episode.Runtime = meta.Runtime
 		}
 
-		if needsFix, err := transcode.NeedsAudioRemux(p.filePath); err != nil {
+		if needsFix, err := transcode.NeedsAudioRemux(p.filePath, s.transcodeOpts); err != nil {
 			slog.Warn("could not probe audio codec", "file", p.filePath, "error", err)
 		} else if needsFix {
 			s.queueRemux(p.filePath)

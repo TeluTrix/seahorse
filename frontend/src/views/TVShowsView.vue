@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api, coverURL, DEFAULT_PAGE_SIZE } from '../api/client'
+import { api, coverURL } from '../api/client'
+import { useConfigStore } from '../stores/config'
 import PosterCard from '../components/PosterCard.vue'
 import type { TVShow } from '../types'
 import { yearOf } from '../utils/format'
@@ -13,7 +14,7 @@ const q = ref((route.query.q as string) ?? '')
 const year = ref((route.query.year as string) ?? '')
 const genre = ref((route.query.genre as string) ?? '')
 const page = ref(Number(route.query.page) || 1)
-const pageSize = DEFAULT_PAGE_SIZE
+const pageSize = useConfigStore().defaultPageSize
 
 const genres = ref<string[]>([])
 const shows = ref<TVShow[]>([])

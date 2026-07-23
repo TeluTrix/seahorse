@@ -1,5 +1,6 @@
 import type {
   AuthResponse,
+  ClientConfig,
   MediaType,
   Movie,
   MoviesPage,
@@ -14,7 +15,6 @@ import type {
 
 const BASE = '/api'
 const TOKEN_KEY = 'seahorse_token'
-export const DEFAULT_PAGE_SIZE = 48
 
 function authHeaders(): Record<string, string> {
   const token = localStorage.getItem(TOKEN_KEY)
@@ -60,10 +60,10 @@ export const api = {
       body: JSON.stringify({ user_email: email, user_password: password }),
     }),
   me: () => request<PublicUser>('/user/me'),
-  listMovies: (page = 1, pageSize = DEFAULT_PAGE_SIZE, sort?: 'newest') =>
+  listMovies: (page = 1, pageSize = 48, sort?: 'newest') =>
     request<MoviesPage>(`/movies?page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}`),
   getMovie: (id: string) => request<Movie>(`/movies/${id}`),
-  listTVShows: (page = 1, pageSize = DEFAULT_PAGE_SIZE, sort?: 'newest') =>
+  listTVShows: (page = 1, pageSize = 48, sort?: 'newest') =>
     request<TVShowsPage>(`/tvshows?page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}`),
   getTVShow: (id: string) => request<TVShow>(`/tvshows/${id}`),
   search: (params: {
@@ -80,10 +80,11 @@ export const api = {
     if (params.genre) query.set('genre', params.genre)
     if (params.type) query.set('type', params.type)
     query.set('page', String(params.page ?? 1))
-    query.set('page_size', String(params.pageSize ?? DEFAULT_PAGE_SIZE))
+    query.set('page_size', String(params.pageSize ?? 48))
     return request<SearchResult>(`/search?${query.toString()}`)
   },
   listGenres: () => request<string[]>('/genres'),
+  getConfig: () => request<ClientConfig>('/config'),
   scanLibrary: (full = false) => request<ScanStatus>(`/admin/scan${full ? '?mode=full' : ''}`, { method: 'POST' }),
   listUsers: () => request<PublicUser[]>('/admin/users'),
   setUserPassword: (userId: string, newPassword: string) =>

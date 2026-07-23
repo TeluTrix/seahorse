@@ -13,6 +13,7 @@ import (
 	"github.com/TeluTrix/seahorse/internal/db"
 	"github.com/TeluTrix/seahorse/internal/scanner"
 	"github.com/TeluTrix/seahorse/internal/tmdb"
+	"github.com/TeluTrix/seahorse/internal/transcode"
 	"github.com/TeluTrix/seahorse/internal/web"
 	"github.com/gorilla/mux"
 )
@@ -24,16 +25,28 @@ func main() {
 		log.Fatalf("could not open database: %v", err)
 	}
 
-	authenticator := auth.New(cfg.JWTSecret)
-	tmdbClient := tmdb.New(cfg.TMDBAPIKey)
-	libraryScanner := scanner.New(tmdbClient, cfg.RemuxConcurrency)
-	handlers := api.NewHandlers(authenticator, libraryScanner, cfg.LibraryPath)
+	authenticator := auth.New(cfg.JWTSecret, cfg.JWTTTL)
+	tmdbClient := tmdb.New(cfg.TMDBAPIKey, cfg.TMDBTimeout, cfg.CastLimit)
+	transcodeOpts := transcode.Options{
+		ProbeTimeout: cfg.AudioProbeTimeout,
+		RemuxTimeout: cfg.AudioRemuxTimeout,
+		AudioBitrate: cfg.AudioBitrate,
+	}
+	libraryScanner := scanner.New(tmdbClient, cfg.RemuxConcurrency, transcodeOpts)
+	clientConfig := api.ClientConfig{
+		DefaultPageSize:               cfg.DefaultPageSize,
+		PlayerSeekSeconds:             cfg.PlayerSeekSeconds,
+		ResumeThresholdSeconds:        cfg.ResumeThresholdSeconds,
+		ProgressReportIntervalSeconds: cfg.ProgressReportIntervalSeconds,
+	}
+	handlers := api.NewHandlers(authenticator, libraryScanner, cfg.LibraryPath, cfg.MaxPageSize, clientConfig)
 
 	r := mux.NewRouter()
 
 	apiRouter := r.PathPrefix("/api").Subrouter()
 	apiRouter.HandleFunc("/auth/register", handlers.Register).Methods("POST")
 	apiRouter.HandleFunc("/auth/login", handlers.Login).Methods("POST")
+	apiRouter.HandleFunc("/config", handlers.GetConfig).Methods("GET")
 
 	apiRouter.Handle("/user/me", authenticator.RequireAuth(http.HandlerFunc(handlers.Me))).Methods("GET")
 

@@ -16,7 +16,7 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 	year := r.URL.Query().Get("year")
 	genre := r.URL.Query().Get("genre")
 	mediaType := r.URL.Query().Get("type")
-	page, pageSize := parsePagination(r)
+	page, pageSize := h.parsePagination(r)
 
 	var movieDTOs []MovieDTO
 	var moviesTotal int64

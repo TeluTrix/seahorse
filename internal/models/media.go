@@ -63,6 +63,7 @@ type Episode struct {
 	Title         string
 	Overview      string
 	StillPath     string
+	Runtime       int    // minutes; 0 if TMDB didn't have it
 	FilePath      string `gorm:"uniqueIndex"`
 	CreatedAt     time.Time
 	UpdatedAt     time.Time

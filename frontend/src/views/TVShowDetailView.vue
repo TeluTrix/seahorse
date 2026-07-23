@@ -4,9 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, coverURL } from '../api/client'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import CastList from '../components/CastList.vue'
+import { useConfigStore } from '../stores/config'
 import type { Episode, TVShow } from '../types'
-import { formatTime } from '../utils/format'
+import { formatRuntime, formatTime } from '../utils/format'
 
+const config = useConfigStore()
 const route = useRoute()
 const router = useRouter()
 const show = ref<TVShow | null>(null)
@@ -55,7 +57,7 @@ const continueWatching = computed<FlatEpisode | null>(() => {
 })
 
 function playLabel(ep: Episode): string {
-  if (ep.progress && !ep.progress.completed && ep.progress.position_seconds > 5) {
+  if (ep.progress && !ep.progress.completed && ep.progress.position_seconds > config.resumeThresholdSeconds) {
     return `Resume ${formatTime(ep.progress.position_seconds)}`
   }
   return 'Play'
@@ -132,6 +134,7 @@ function playEpisode(id: string, restart: boolean) {
           </div>
           <div class="episode-info" @click="playEpisode(ep.id, !!ep.progress?.completed)">
             <strong>{{ ep.episode_number }}. {{ ep.title }}</strong>
+            <span v-if="ep.runtime_minutes" class="runtime">{{ formatRuntime(ep.runtime_minutes) }}</span>
             <p>{{ ep.overview }}</p>
           </div>
           <div class="episode-actions">
@@ -257,6 +260,11 @@ function playEpisode(id: string, restart: boolean) {
 .episode-info {
   flex: 1;
   cursor: pointer;
+}
+.runtime {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
 }
 .episode-actions {
   display: flex;

@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const AccessTokenTTL = 24 * time.Hour
-
 type Claims struct {
 	UserID uuid.UUID   `json:"sub"`
 	Role   models.Role `json:"role"`
@@ -19,14 +17,14 @@ type Claims struct {
 
 var ErrInvalidToken = errors.New("invalid or expired token")
 
-func GenerateToken(secret string, userID uuid.UUID, role models.Role) (string, error) {
+func GenerateToken(secret string, userID uuid.UUID, role models.Role, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		UserID: userID,
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(AccessTokenTTL)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 		},
 	}
 

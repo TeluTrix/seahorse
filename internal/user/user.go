@@ -69,3 +69,19 @@ func GetByID(id uuid.UUID) (models.User, error) {
 	}
 	return u, nil
 }
+
+func ListAll() ([]models.User, error) {
+	var users []models.User
+	if err := db.DB.Order("user_email").Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+func SetPassword(id uuid.UUID, newPassword string) error {
+	hashed, err := auth.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	return db.DB.Model(&models.User{}).Where("user_id = ?", id).Update("user_password", hashed).Error
+}

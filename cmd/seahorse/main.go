@@ -45,8 +45,21 @@ func main() {
 	apiRouter.Handle("/stream/movies/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.StreamMovie))).Methods("GET")
 	apiRouter.Handle("/stream/episodes/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.StreamEpisode))).Methods("GET")
 
+	apiRouter.Handle("/images/movies/{id}/cover", authenticator.RequireAuth(http.HandlerFunc(handlers.MovieCover))).Methods("GET")
+	apiRouter.Handle("/images/tvshows/{id}/cover", authenticator.RequireAuth(http.HandlerFunc(handlers.TVShowCover))).Methods("GET")
+
+	apiRouter.Handle("/subtitles/movies/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.MovieSubtitles))).Methods("GET")
+	apiRouter.Handle("/subtitles/movies/{id}/vtt", authenticator.RequireAuth(http.HandlerFunc(handlers.MovieSubtitleVTT))).Methods("GET")
+	apiRouter.Handle("/subtitles/episodes/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.EpisodeSubtitles))).Methods("GET")
+	apiRouter.Handle("/subtitles/episodes/{id}/vtt", authenticator.RequireAuth(http.HandlerFunc(handlers.EpisodeSubtitleVTT))).Methods("GET")
+
+	apiRouter.Handle("/progress", authenticator.RequireAuth(http.HandlerFunc(handlers.SaveProgress))).Methods("PUT")
+	apiRouter.Handle("/progress/{mediaType}/{mediaId}", authenticator.RequireAuth(http.HandlerFunc(handlers.GetProgress))).Methods("GET")
+
 	apiRouter.Handle("/admin/scan", authenticator.RequireAdmin(http.HandlerFunc(handlers.ScanLibrary))).Methods("POST")
 	apiRouter.Handle("/admin/scan/status", authenticator.RequireAdmin(http.HandlerFunc(handlers.ScanStatus))).Methods("GET")
+	apiRouter.Handle("/admin/users", authenticator.RequireAdmin(http.HandlerFunc(handlers.ListUsers))).Methods("GET")
+	apiRouter.Handle("/admin/users/{id}/password", authenticator.RequireAdmin(http.HandlerFunc(handlers.SetUserPassword))).Methods("PUT")
 
 	r.PathPrefix("/").Handler(web.Handler())
 

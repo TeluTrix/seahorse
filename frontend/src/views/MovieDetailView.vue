@@ -1,19 +1,30 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api } from '../api/client'
+import { api, coverURL } from '../api/client'
 import type { Movie } from '../types'
+import { formatTime } from '../utils/format'
 
 const route = useRoute()
 const router = useRouter()
 const movie = ref<Movie | null>(null)
 
+const posterUrl = computed(() => {
+  if (!movie.value) return ''
+  return movie.value.has_local_cover ? coverURL('movies', movie.value.id) : movie.value.poster_url
+})
+
+const hasResumePoint = computed(() => {
+  const p = movie.value?.progress
+  return !!p && !p.completed && p.position_seconds > 5
+})
+
 onMounted(async () => {
   movie.value = await api.getMovie(route.params.id as string)
 })
 
-function play() {
-  router.push({ name: 'watch-movie', params: { id: route.params.id } })
+function play(restart: boolean) {
+  router.push({ name: 'watch-movie', params: { id: route.params.id }, query: restart ? { restart: '1' } : {} })
 }
 </script>
 
@@ -24,12 +35,18 @@ function play() {
     :style="movie.backdrop_url ? { backgroundImage: `url(${movie.backdrop_url})` } : undefined"
   >
     <div class="overlay">
-      <img v-if="movie.poster_url" :src="movie.poster_url" :alt="movie.title" class="poster" />
+      <img v-if="posterUrl" :src="posterUrl" :alt="movie.title" class="poster" />
       <div>
         <h1>{{ movie.title }}</h1>
         <p class="meta">{{ movie.release_date }} · ⭐ {{ movie.vote_average.toFixed(1) }} · {{ movie.genres }}</p>
         <p class="overview">{{ movie.overview }}</p>
-        <button @click="play">▶ Play</button>
+        <div class="actions">
+          <template v-if="hasResumePoint">
+            <button @click="play(false)">▶ Resume from {{ formatTime(movie.progress!.position_seconds) }}</button>
+            <button class="secondary" @click="play(true)">Start Over</button>
+          </template>
+          <button v-else @click="play(false)">▶ Play</button>
+        </div>
       </div>
     </div>
   </div>
@@ -61,5 +78,13 @@ function play() {
 .overview {
   margin-bottom: 1.5rem;
   max-width: 60ch;
+}
+.actions {
+  display: flex;
+  gap: 0.75rem;
+}
+button.secondary {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
 }
 </style>

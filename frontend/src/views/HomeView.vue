@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../api/client'
+import { api, coverURL } from '../api/client'
 import type { Movie, TVShow } from '../types'
 
 const movies = ref<Movie[]>([])
 const shows = ref<TVShow[]>([])
 const loading = ref(true)
 const router = useRouter()
+
+function moviePoster(movie: Movie): string {
+  return movie.has_local_cover ? coverURL('movies', movie.id) : movie.poster_url
+}
+function showPoster(show: TVShow): string {
+  return show.has_local_cover ? coverURL('tvshows', show.id) : show.poster_url
+}
 
 onMounted(async () => {
   try {
@@ -33,7 +40,7 @@ onMounted(async () => {
           class="card"
           @click="router.push({ name: 'movie', params: { id: movie.id } })"
         >
-          <img v-if="movie.poster_url" :src="movie.poster_url" :alt="movie.title" />
+          <img v-if="moviePoster(movie)" :src="moviePoster(movie)" :alt="movie.title" />
           <div class="card-title">{{ movie.title }}</div>
         </div>
       </div>
@@ -49,7 +56,7 @@ onMounted(async () => {
           class="card"
           @click="router.push({ name: 'tvshow', params: { id: show.id } })"
         >
-          <img v-if="show.poster_url" :src="show.poster_url" :alt="show.title" />
+          <img v-if="showPoster(show)" :src="showPoster(show)" :alt="show.title" />
           <div class="card-title">{{ show.title }}</div>
         </div>
       </div>

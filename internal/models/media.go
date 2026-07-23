@@ -18,6 +18,7 @@ type Movie struct {
 	VoteAverage  float64
 	Genres       string
 	FilePath     string `gorm:"uniqueIndex"`
+	CoverCached  bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    gorm.DeletedAt `gorm:"index"`
@@ -33,7 +34,8 @@ type TVShow struct {
 	FirstAirDate string
 	VoteAverage  float64
 	Genres       string
-	FolderPath   string   `gorm:"uniqueIndex"`
+	FolderPath   string `gorm:"uniqueIndex"`
+	CoverCached  bool
 	Seasons      []Season `gorm:"foreignKey:TVShowID"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time

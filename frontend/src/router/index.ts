@@ -6,7 +6,9 @@ import HomeView from '../views/HomeView.vue'
 import MovieDetailView from '../views/MovieDetailView.vue'
 import TVShowDetailView from '../views/TVShowDetailView.vue'
 import PlayerView from '../views/PlayerView.vue'
-import AdminView from '../views/AdminView.vue'
+import AdminLayout from '../components/AdminLayout.vue'
+import AdminLibraryView from '../views/AdminLibraryView.vue'
+import AdminUsersView from '../views/AdminUsersView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -18,7 +20,16 @@ const router = createRouter({
     { path: '/tvshows/:id', name: 'tvshow', component: TVShowDetailView, props: true },
     { path: '/watch/movie/:id', name: 'watch-movie', component: PlayerView, props: true },
     { path: '/watch/episode/:id', name: 'watch-episode', component: PlayerView, props: true },
-    { path: '/admin', name: 'admin', component: AdminView, meta: { requiresAdmin: true } },
+    {
+      path: '/admin',
+      component: AdminLayout,
+      meta: { requiresAdmin: true },
+      children: [
+        { path: '', redirect: { name: 'admin-library' } },
+        { path: 'library', name: 'admin-library', component: AdminLibraryView },
+        { path: 'users', name: 'admin-users', component: AdminUsersView },
+      ],
+    },
   ],
 })
 

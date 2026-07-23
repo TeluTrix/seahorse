@@ -35,5 +35,6 @@ func OpenConnection(dbPath string) error {
 		&models.TVShow{},
 		&models.Season{},
 		&models.Episode{},
+		&models.WatchProgress{},
 	)
 }

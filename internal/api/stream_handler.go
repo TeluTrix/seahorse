@@ -9,10 +9,16 @@ import (
 
 	"github.com/TeluTrix/seahorse/internal/db"
 	"github.com/TeluTrix/seahorse/internal/models"
+	"github.com/TeluTrix/seahorse/internal/transcode"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
 )
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
 
 var videoMimeTypes = map[string]string{
 	".mp4":  "video/mp4",
@@ -23,6 +29,14 @@ var videoMimeTypes = map[string]string{
 }
 
 func serveVideoFile(w http.ResponseWriter, r *http.Request, filePath string) {
+	// Prefer a cached audio-remuxed copy over the original, when the scanner
+	// found the original's audio codec incompatible with browser playback
+	// (see internal/transcode) — resolved at request time, same pattern as
+	// cover/subtitle caching, no DB column needed.
+	if remuxed := transcode.RemuxedPath(filePath); fileExists(remuxed) {
+		filePath = remuxed
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "media file not found on disk")

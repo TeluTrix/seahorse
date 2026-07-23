@@ -1,11 +1,20 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, coverURL } from '../api/client'
+import PosterCard from '../components/PosterCard.vue'
 import type { Movie, TVShow } from '../types'
+import { yearOf } from '../utils/format'
 
 const movies = ref<Movie[]>([])
+const moviesTotal = ref(0)
+const moviesPage = ref(1)
+
 const shows = ref<TVShow[]>([])
+const showsTotal = ref(0)
+const showsPage = ref(1)
+
+const pageSize = 50
 const loading = ref(true)
 const router = useRouter()
 
@@ -16,11 +25,24 @@ function showPoster(show: TVShow): string {
   return show.has_local_cover ? coverURL('tvshows', show.id) : show.poster_url
 }
 
+async function loadMovies() {
+  const result = await api.listMovies(moviesPage.value, pageSize)
+  movies.value = result.movies
+  moviesTotal.value = result.total
+}
+
+async function loadShows() {
+  const result = await api.listTVShows(showsPage.value, pageSize)
+  shows.value = result.tv_shows
+  showsTotal.value = result.total
+}
+
+watch(moviesPage, loadMovies)
+watch(showsPage, loadShows)
+
 onMounted(async () => {
   try {
-    const [movieResults, showResults] = await Promise.all([api.listMovies(), api.listTVShows()])
-    movies.value = movieResults
-    shows.value = showResults
+    await Promise.all([loadMovies(), loadShows()])
   } finally {
     loading.value = false
   }
@@ -34,15 +56,21 @@ onMounted(async () => {
       <h2>Movies</h2>
       <p v-if="!movies.length" class="empty">No movies yet. Ask an admin to scan the library.</p>
       <div class="grid">
-        <div
+        <PosterCard
           v-for="movie in movies"
           :key="movie.id"
-          class="card"
+          :title="movie.title"
+          :poster-url="moviePoster(movie)"
+          :year="yearOf(movie.release_date)"
           @click="router.push({ name: 'movie', params: { id: movie.id } })"
-        >
-          <img v-if="moviePoster(movie)" :src="moviePoster(movie)" :alt="movie.title" />
-          <div class="card-title">{{ movie.title }}</div>
-        </div>
+        />
+      </div>
+      <div v-if="moviesTotal > pageSize" class="pagination">
+        <button class="secondary" :disabled="moviesPage <= 1" @click="moviesPage--">Prev</button>
+        <span class="page-indicator">Page {{ moviesPage }} of {{ Math.ceil(moviesTotal / pageSize) }}</span>
+        <button class="secondary" :disabled="moviesPage >= Math.ceil(moviesTotal / pageSize)" @click="moviesPage++">
+          Next
+        </button>
       </div>
     </section>
 
@@ -50,15 +78,21 @@ onMounted(async () => {
       <h2>TV Shows</h2>
       <p v-if="!shows.length" class="empty">No tv shows yet. Ask an admin to scan the library.</p>
       <div class="grid">
-        <div
+        <PosterCard
           v-for="show in shows"
           :key="show.id"
-          class="card"
+          :title="show.title"
+          :poster-url="showPoster(show)"
+          :year="yearOf(show.first_air_date)"
           @click="router.push({ name: 'tvshow', params: { id: show.id } })"
-        >
-          <img v-if="showPoster(show)" :src="showPoster(show)" :alt="show.title" />
-          <div class="card-title">{{ show.title }}</div>
-        </div>
+        />
+      </div>
+      <div v-if="showsTotal > pageSize" class="pagination">
+        <button class="secondary" :disabled="showsPage <= 1" @click="showsPage--">Prev</button>
+        <span class="page-indicator">Page {{ showsPage }} of {{ Math.ceil(showsTotal / pageSize) }}</span>
+        <button class="secondary" :disabled="showsPage >= Math.ceil(showsTotal / pageSize)" @click="showsPage++">
+          Next
+        </button>
       </div>
     </section>
   </template>

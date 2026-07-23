@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/TeluTrix/seahorse/internal/ffmpeg"
 )
 
 type Track struct {
@@ -259,7 +261,7 @@ func Discover(videoPath string) []Track {
 		}
 	}
 
-	if Available() {
+	if ffmpeg.Available() {
 		streams, err := ProbeSubtitleStreams(videoPath)
 		if err == nil {
 			for _, st := range streams {

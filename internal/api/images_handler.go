@@ -13,12 +13,21 @@ import (
 	"gorm.io/gorm"
 )
 
-var coverExts = []string{"jpg", "jpeg", "png"}
+// webp checked first: covers cached after the WebP optimization was added
+// use it; jpg/jpeg/png remain for backward compatibility with covers cached
+// before that.
+var coverExts = []string{"webp", "jpg", "jpeg", "png"}
 
 func serveCover(w http.ResponseWriter, r *http.Request, dir string) {
 	for _, ext := range coverExts {
 		path := filepath.Join(dir, "cover."+ext)
 		if _, err := os.Stat(path); err == nil {
+			if ext == "webp" {
+				// Go's built-in MIME table doesn't reliably know .webp on
+				// every system, so set it explicitly (same reasoning as the
+				// video Content-Type handling in stream_handler.go).
+				w.Header().Set("Content-Type", "image/webp")
+			}
 			http.ServeFile(w, r, path)
 			return
 		}

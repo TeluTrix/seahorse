@@ -15,8 +15,10 @@ import (
 	"time"
 
 	"github.com/TeluTrix/seahorse/internal/db"
+	"github.com/TeluTrix/seahorse/internal/ffmpeg"
 	"github.com/TeluTrix/seahorse/internal/models"
 	"github.com/TeluTrix/seahorse/internal/tmdb"
+	"github.com/TeluTrix/seahorse/internal/transcode"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -26,7 +28,10 @@ var (
 	seasonRegex  = regexp.MustCompile(`(?i)^season\s*0*(\d+)$`)
 	episodeRegex = regexp.MustCompile(`(?i)s(\d{2})e(\d{2})`)
 	videoExtSet  = map[string]bool{".mp4": true, ".mkv": true, ".avi": true, ".mov": true, ".webm": true}
-	coverExts    = []string{"jpg", "jpeg", "png"}
+	// webp checked first: covers cached after the WebP optimization was added
+	// use it; jpg/jpeg/png remain for backward compatibility with covers
+	// cached before that.
+	coverExts = []string{"webp", "jpg", "jpeg", "png"}
 )
 
 type Status struct {
@@ -203,9 +208,16 @@ func wipeAllMedia() error {
 	return nil
 }
 
-// downloadCover ensures dir contains a local cover.{jpg,jpeg,png}. If one
-// already exists it's left as-is (no network call). Returns whether a local
-// cover ended up present.
+// downloadCover ensures dir contains a local cover.{webp,jpg,jpeg,png}. If
+// one already exists it's left as-is (no network call). Returns whether a
+// local cover ended up present.
+//
+// Fetches TMDB's w500 size rather than "original" (often 2000x3000px,
+// multiple MB) since posters are never displayed larger than ~220px in this
+// UI — w500 is already generous headroom at a fraction of the size. If
+// ffmpeg is available, the downloaded JPEG is further converted to WebP
+// (~25-35% smaller again) and the intermediate JPEG removed; otherwise the
+// JPEG is kept as-is.
 func downloadCover(dir, posterPath string) bool {
 	for _, ext := range coverExts {
 		if _, err := os.Stat(filepath.Join(dir, "cover."+ext)); err == nil {
@@ -216,7 +228,7 @@ func downloadCover(dir, posterPath string) bool {
 		return false
 	}
 
-	resp, err := http.Get(tmdb.ImageURL(posterPath, "original"))
+	resp, err := http.Get(tmdb.ImageURL(posterPath, "w500"))
 	if err != nil {
 		slog.Warn("could not download cover image", "dir", dir, "error", err)
 		return false
@@ -227,17 +239,28 @@ func downloadCover(dir, posterPath string) bool {
 		return false
 	}
 
-	out, err := os.Create(filepath.Join(dir, "cover.jpg"))
+	jpgPath := filepath.Join(dir, "cover.jpg")
+	out, err := os.Create(jpgPath)
 	if err != nil {
 		slog.Warn("could not write cover image", "dir", dir, "error", err)
 		return false
 	}
-	defer out.Close()
-
 	if _, err := io.Copy(out, resp.Body); err != nil {
+		out.Close()
 		slog.Warn("could not write cover image", "dir", dir, "error", err)
 		return false
 	}
+	out.Close()
+
+	if ffmpeg.Available() {
+		webpPath := filepath.Join(dir, "cover.webp")
+		if err := transcode.ConvertToWebP(jpgPath, webpPath); err != nil {
+			slog.Warn("could not convert cover to webp, keeping jpg", "dir", dir, "error", err)
+		} else {
+			os.Remove(jpgPath)
+		}
+	}
+
 	return true
 }
 
@@ -310,12 +333,17 @@ func findVideoFile(dir string) (string, error) {
 // scanMovie returns whether a new movie was added. Movies already known by
 // FilePath are left completely untouched (no re-fetch of metadata).
 func (s *Scanner) scanMovie(moviesRoot, folderName string) (bool, error) {
-	matches := folderRegex.FindStringSubmatch(folderName)
-	if matches == nil {
-		return false, fmt.Errorf("folder name %q does not match 'Title (Year)'", folderName)
+	// Prefer the strict "Title (Year)" pattern for a more accurate TMDB
+	// match, but don't give up on folders that lack it — fall back to
+	// searching by the whole folder name with no year constraint (which
+	// tmdb.SearchMovie already handles for year == 0). Only if that
+	// title-only search also comes up empty does this end up logged as
+	// unmatched by the caller.
+	title, yearNum := folderName, 0
+	if matches := folderRegex.FindStringSubmatch(folderName); matches != nil {
+		title = matches[1]
+		yearNum, _ = strconv.Atoi(matches[2])
 	}
-	title, year := matches[1], matches[2]
-	yearNum, _ := strconv.Atoi(year)
 
 	videoFile, err := findVideoFile(filepath.Join(moviesRoot, folderName))
 	if err != nil {
@@ -334,6 +362,15 @@ func (s *Scanner) scanMovie(moviesRoot, folderName string) (bool, error) {
 	meta, err := s.tmdb.SearchMovie(title, yearNum)
 	if err != nil {
 		return false, err
+	}
+
+	if needsFix, err := transcode.NeedsAudioRemux(videoFile); err != nil {
+		slog.Warn("could not probe audio codec", "file", videoFile, "error", err)
+	} else if needsFix {
+		s.setStatus(func(st *Status) { st.CurrentItem = "remuxing audio: " + filepath.Base(videoFile) })
+		if err := transcode.RemuxAudio(videoFile); err != nil {
+			slog.Warn("could not remux incompatible audio", "file", videoFile, "error", err)
+		}
 	}
 
 	movie := models.Movie{
@@ -356,12 +393,14 @@ func (s *Scanner) scanMovie(moviesRoot, folderName string) (bool, error) {
 // scanTVShow returns whether the show itself is new, plus the number of new
 // episodes found (which can be > 0 even for an already-known show).
 func (s *Scanner) scanTVShow(tvRoot, folderName string) (bool, int, error) {
-	matches := folderRegex.FindStringSubmatch(folderName)
-	if matches == nil {
-		return false, 0, fmt.Errorf("folder name %q does not match 'Title (Year)'", folderName)
+	// See scanMovie: fall back to a title-only search (no year constraint)
+	// rather than skipping the folder outright when it doesn't match the
+	// strict "Title (Year)" pattern.
+	title, yearNum := folderName, 0
+	if matches := folderRegex.FindStringSubmatch(folderName); matches != nil {
+		title = matches[1]
+		yearNum, _ = strconv.Atoi(matches[2])
 	}
-	title, year := matches[1], matches[2]
-	yearNum, _ := strconv.Atoi(year)
 
 	showFolder := filepath.Join(tvRoot, folderName)
 
@@ -490,6 +529,15 @@ func (s *Scanner) scanSeason(show models.TVShow, seasonPath string, seasonNumber
 			episode.Title = meta.Title
 			episode.Overview = meta.Overview
 			episode.StillPath = meta.StillPath
+		}
+
+		if needsFix, err := transcode.NeedsAudioRemux(p.filePath); err != nil {
+			slog.Warn("could not probe audio codec", "file", p.filePath, "error", err)
+		} else if needsFix {
+			s.setStatus(func(st *Status) { st.CurrentItem = "remuxing audio: " + filepath.Base(p.filePath) })
+			if err := transcode.RemuxAudio(p.filePath); err != nil {
+				slog.Warn("could not remux incompatible audio", "file", p.filePath, "error", err)
+			}
 		}
 
 		if err := db.DB.Create(&episode).Error; err != nil {

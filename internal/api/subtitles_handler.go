@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/TeluTrix/seahorse/internal/db"
+	"github.com/TeluTrix/seahorse/internal/ffmpeg"
 	"github.com/TeluTrix/seahorse/internal/models"
 	"github.com/TeluTrix/seahorse/internal/subtitles"
 	"github.com/google/uuid"
@@ -103,7 +104,7 @@ func serveSubtitleTrack(w http.ResponseWriter, r *http.Request, videoPath string
 		w.Write(subtitles.SRTToVTT(data, alreadyVTT))
 
 	case strings.HasPrefix(trackID, "embedded-"):
-		if !subtitles.Available() {
+		if !ffmpeg.Available() {
 			writeError(w, http.StatusNotFound, "embedded subtitle extraction is unavailable")
 			return
 		}

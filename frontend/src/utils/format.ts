@@ -1,3 +1,7 @@
+export function yearOf(dateStr: string | undefined): string {
+  return dateStr?.slice(0, 4) ?? ''
+}
+
 export function formatTime(totalSeconds: number): string {
   const seconds = Math.max(0, Math.floor(totalSeconds))
   const h = Math.floor(seconds / 3600)

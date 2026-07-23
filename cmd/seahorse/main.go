@@ -42,6 +42,9 @@ func main() {
 	apiRouter.Handle("/tvshows", authenticator.RequireAuth(http.HandlerFunc(handlers.ListTVShows))).Methods("GET")
 	apiRouter.Handle("/tvshows/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.GetTVShow))).Methods("GET")
 
+	apiRouter.Handle("/search", authenticator.RequireAuth(http.HandlerFunc(handlers.Search))).Methods("GET")
+	apiRouter.Handle("/genres", authenticator.RequireAuth(http.HandlerFunc(handlers.ListGenres))).Methods("GET")
+
 	apiRouter.Handle("/stream/movies/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.StreamMovie))).Methods("GET")
 	apiRouter.Handle("/stream/episodes/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.StreamEpisode))).Methods("GET")
 

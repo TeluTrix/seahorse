@@ -1,19 +1,36 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { APP_VERSION } from '../version'
 
 const auth = useAuthStore()
 const router = useRouter()
+const searchQuery = ref('')
 
 function handleLogout() {
   auth.logout()
   router.push({ name: 'login' })
 }
+
+function submitSearch() {
+  const q = searchQuery.value.trim()
+  if (!q) return
+  router.push({ name: 'search', query: { q } })
+}
 </script>
 
 <template>
   <nav class="app-nav">
-    <RouterLink to="/" class="brand">seahorse</RouterLink>
+    <RouterLink to="/" class="brand">seahorse<span class="version">v{{ APP_VERSION }}</span></RouterLink>
+    <input
+      v-if="auth.isAuthenticated"
+      v-model="searchQuery"
+      type="search"
+      placeholder="Search movies & tv shows..."
+      class="nav-search"
+      @keyup.enter="submitSearch"
+    />
     <div class="spacer" />
     <template v-if="auth.isAuthenticated">
       <RouterLink v-if="auth.isAdmin" to="/admin">Admin</RouterLink>
@@ -51,6 +68,23 @@ function handleLogout() {
   font-weight: 700;
   font-size: 1.15rem;
   opacity: 1 !important;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+.version {
+  font-weight: 400;
+  font-size: 0.7rem;
+  opacity: 0.55;
+}
+.nav-search {
+  width: 260px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+.nav-search::placeholder {
+  color: rgba(255, 255, 255, 0.5);
 }
 .user-email {
   opacity: 0.7;

@@ -2,11 +2,14 @@ import type {
   AuthResponse,
   MediaType,
   Movie,
+  MoviesPage,
   Progress,
   PublicUser,
   ScanStatus,
+  SearchResult,
   SubtitleTrack,
   TVShow,
+  TVShowsPage,
 } from '../types'
 
 const BASE = '/api'
@@ -56,10 +59,22 @@ export const api = {
       body: JSON.stringify({ user_email: email, user_password: password }),
     }),
   me: () => request<PublicUser>('/user/me'),
-  listMovies: () => request<Movie[]>('/movies'),
+  listMovies: (page = 1, pageSize = 50) =>
+    request<MoviesPage>(`/movies?page=${page}&page_size=${pageSize}`),
   getMovie: (id: string) => request<Movie>(`/movies/${id}`),
-  listTVShows: () => request<TVShow[]>('/tvshows'),
+  listTVShows: (page = 1, pageSize = 50) =>
+    request<TVShowsPage>(`/tvshows?page=${page}&page_size=${pageSize}`),
   getTVShow: (id: string) => request<TVShow>(`/tvshows/${id}`),
+  search: (params: { q?: string; year?: string; genre?: string; page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams()
+    if (params.q) query.set('q', params.q)
+    if (params.year) query.set('year', params.year)
+    if (params.genre) query.set('genre', params.genre)
+    query.set('page', String(params.page ?? 1))
+    query.set('page_size', String(params.pageSize ?? 50))
+    return request<SearchResult>(`/search?${query.toString()}`)
+  },
+  listGenres: () => request<string[]>('/genres'),
   scanLibrary: (full = false) => request<ScanStatus>(`/admin/scan${full ? '?mode=full' : ''}`, { method: 'POST' }),
   listUsers: () => request<PublicUser[]>('/admin/users'),
   setUserPassword: (userId: string, newPassword: string) =>

@@ -71,6 +71,29 @@ export interface ScanStatus {
   finished_at?: string
 }
 
+export interface MoviesPage {
+  movies: Movie[]
+  page: number
+  page_size: number
+  total: number
+}
+
+export interface TVShowsPage {
+  tv_shows: TVShow[]
+  page: number
+  page_size: number
+  total: number
+}
+
+export interface SearchResult {
+  movies: Movie[]
+  movies_total: number
+  tv_shows: TVShow[]
+  tv_shows_total: number
+  page: number
+  page_size: number
+}
+
 export type MediaType = 'movie' | 'episode'
 
 export type SubtitleSource = 'external' | 'embedded'

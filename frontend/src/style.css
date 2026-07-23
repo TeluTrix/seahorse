@@ -135,6 +135,17 @@ button.secondary {
   color: var(--text-dim);
 }
 
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.pagination .page-indicator {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
 .spinner {
   width: 32px;
   height: 32px;

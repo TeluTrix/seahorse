@@ -150,3 +150,26 @@ func toTVShowDTO(t models.TVShow, progressByEpisode map[uuid.UUID]models.WatchPr
 		Seasons:       seasons,
 	}
 }
+
+type MoviesPageDTO struct {
+	Movies   []MovieDTO `json:"movies"`
+	Page     int        `json:"page"`
+	PageSize int        `json:"page_size"`
+	Total    int64      `json:"total"`
+}
+
+type TVShowsPageDTO struct {
+	TVShows  []TVShowDTO `json:"tv_shows"`
+	Page     int         `json:"page"`
+	PageSize int         `json:"page_size"`
+	Total    int64       `json:"total"`
+}
+
+type SearchResultDTO struct {
+	Movies       []MovieDTO  `json:"movies"`
+	MoviesTotal  int64       `json:"movies_total"`
+	TVShows      []TVShowDTO `json:"tv_shows"`
+	TVShowsTotal int64       `json:"tv_shows_total"`
+	Page         int         `json:"page"`
+	PageSize     int         `json:"page_size"`
+}

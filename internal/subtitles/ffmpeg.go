@@ -5,27 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"sync"
 )
-
-var (
-	availableOnce sync.Once
-	available     bool
-)
-
-// Available reports whether ffprobe/ffmpeg are installed. Used only to
-// extract subtitle streams already muxed into a video container — never for
-// video transcoding/playback, which stays direct-play. Checked once and
-// cached; if unavailable, embedded-subtitle discovery is silently skipped
-// and external subtitle files still work normally.
-func Available() bool {
-	availableOnce.Do(func() {
-		_, ffprobeErr := exec.LookPath("ffprobe")
-		_, ffmpegErr := exec.LookPath("ffmpeg")
-		available = ffprobeErr == nil && ffmpegErr == nil
-	})
-	return available
-}
 
 type EmbeddedStream struct {
 	Index    int

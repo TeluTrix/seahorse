@@ -14,8 +14,16 @@ import (
 )
 
 func (h *Handlers) ListMovies(w http.ResponseWriter, r *http.Request) {
+	page, pageSize := parsePagination(r)
+
+	var total int64
+	if err := db.DB.Model(&models.Movie{}).Count(&total).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load movies")
+		return
+	}
+
 	var movies []models.Movie
-	if err := db.DB.Order("title").Find(&movies).Error; err != nil {
+	if err := db.DB.Order("title").Offset((page - 1) * pageSize).Limit(pageSize).Find(&movies).Error; err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load movies")
 		return
 	}
@@ -24,7 +32,7 @@ func (h *Handlers) ListMovies(w http.ResponseWriter, r *http.Request) {
 	for _, m := range movies {
 		dtos = append(dtos, toMovieDTO(m, nil))
 	}
-	writeJSON(w, http.StatusOK, dtos)
+	writeJSON(w, http.StatusOK, MoviesPageDTO{Movies: dtos, Page: page, PageSize: pageSize, Total: total})
 }
 
 func (h *Handlers) GetMovie(w http.ResponseWriter, r *http.Request) {
@@ -57,8 +65,16 @@ func (h *Handlers) GetMovie(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) ListTVShows(w http.ResponseWriter, r *http.Request) {
+	page, pageSize := parsePagination(r)
+
+	var total int64
+	if err := db.DB.Model(&models.TVShow{}).Count(&total).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load tv shows")
+		return
+	}
+
 	var shows []models.TVShow
-	if err := db.DB.Order("title").Find(&shows).Error; err != nil {
+	if err := db.DB.Order("title").Offset((page - 1) * pageSize).Limit(pageSize).Find(&shows).Error; err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load tv shows")
 		return
 	}
@@ -67,7 +83,7 @@ func (h *Handlers) ListTVShows(w http.ResponseWriter, r *http.Request) {
 	for _, s := range shows {
 		dtos = append(dtos, toTVShowDTO(s, nil))
 	}
-	writeJSON(w, http.StatusOK, dtos)
+	writeJSON(w, http.StatusOK, TVShowsPageDTO{TVShows: dtos, Page: page, PageSize: pageSize, Total: total})
 }
 
 func (h *Handlers) GetTVShow(w http.ResponseWriter, r *http.Request) {

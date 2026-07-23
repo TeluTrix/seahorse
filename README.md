@@ -146,4 +146,4 @@ This is a monolith on purpose, and it's worth being explicit about what that mea
 
 ## License
 
-No license has been chosen for this project yet.
+Apache GPL 2.0 License (Have a look at the LICENSE file.)

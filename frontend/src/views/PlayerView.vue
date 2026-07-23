@@ -1,16 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api, streamURL, subtitleURL, TOKEN_KEY } from '../api/client'
 import type { MediaType, SubtitleTrack } from '../types'
 
 const route = useRoute()
-const kind = computed<'movies' | 'episodes'>(() => (route.name === 'watch-movie' ? 'movies' : 'episodes'))
-const mediaType = computed<MediaType>(() => (route.name === 'watch-movie' ? 'movie' : 'episode'))
-const mediaId = computed(() => route.params.id as string)
-const restart = computed(() => route.query.restart === '1')
+// Captured once, not as computed(): Vue Router's `route` is a single shared
+// reactive object, and it already reflects the *destination* route by the
+// time this component's unmount cleanup runs (e.g. reporting final progress
+// on navigating away) — a computed() bound to route.name/params would read
+// the wrong values at exactly that moment, silently reporting progress
+// under the wrong media type. These never change over this component's
+// lifetime anyway, so a one-time snapshot is both correct and simpler.
+const kind: 'movies' | 'episodes' = route.name === 'watch-movie' ? 'movies' : 'episodes'
+const mediaType: MediaType = route.name === 'watch-movie' ? 'movie' : 'episode'
+const mediaId = route.params.id as string
+const restart = route.query.restart === '1'
 
-const src = computed(() => streamURL(kind.value, mediaId.value))
+const src = streamURL(kind, mediaId)
 const tracks = ref<SubtitleTrack[]>([])
 
 const videoEl = ref<HTMLVideoElement | null>(null)
@@ -19,7 +26,7 @@ let lastReported = 0
 
 function report(position: number, duration: number) {
   if (!duration || Number.isNaN(duration)) return
-  api.saveProgress(mediaType.value, mediaId.value, position, duration).catch(() => {})
+  api.saveProgress(mediaType, mediaId, position, duration).catch(() => {})
 }
 
 function reportOnUnload() {
@@ -31,20 +38,30 @@ function reportOnUnload() {
     keepalive: true,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({
-      media_type: mediaType.value,
-      media_id: mediaId.value,
+      media_type: mediaType,
+      media_id: mediaId,
       position_seconds: video.currentTime,
       duration_seconds: video.duration,
     }),
   }).catch(() => {})
 }
 
-function onLoadedMetadata() {
+// Applies the fetched resume position to the video, if both are ready.
+// Called from two places because of a race between the progress fetch (an
+// async network call) and the video's own "loadedmetadata" event: whichever
+// finishes first has to defer to whichever finishes second, since
+// "loadedmetadata" only fires once and video.duration is unknown until then.
+function applyResumeIfReady() {
   const video = videoEl.value
-  if (!video) return
-  if (!restart.value && resumePosition > 5 && resumePosition < video.duration - 5) {
+  if (!video || restart) return
+  if (video.readyState < 1 || !video.duration) return // HAVE_METADATA not reached yet
+  if (resumePosition > 5 && resumePosition < video.duration - 5) {
     video.currentTime = resumePosition
   }
+}
+
+function onLoadedMetadata() {
+  applyResumeIfReady()
 }
 
 function onTimeUpdate() {
@@ -69,11 +86,16 @@ function onEnded() {
 }
 
 onMounted(async () => {
-  if (!restart.value) {
-    const progress = await api.getProgress(mediaType.value, mediaId.value)
-    if (progress) resumePosition = progress.position_seconds
+  if (!restart) {
+    const progress = await api.getProgress(mediaType, mediaId)
+    // Mirror the detail page's own "should we offer to resume" condition
+    // (see MovieDetailView/TVShowDetailView's hasResumePoint) — otherwise an
+    // item marked completed shows "Play" on the detail page but silently
+    // jumps back to the old position here anyway.
+    if (progress && !progress.completed) resumePosition = progress.position_seconds
+    applyResumeIfReady() // metadata may have already loaded while this was in flight
   }
-  tracks.value = await api.listSubtitles(kind.value, mediaId.value).catch(() => [])
+  tracks.value = await api.listSubtitles(kind, mediaId).catch(() => [])
 
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('beforeunload', reportOnUnload)
@@ -109,7 +131,7 @@ onBeforeUnmount(() => {
         kind="subtitles"
         :src="subtitleURL(kind, mediaId, track.id)"
         :srclang="track.language"
-        :label="`${track.label} (${track.source})`"
+        :label="track.label"
       />
     </video>
   </div>

@@ -403,7 +403,7 @@ func downloadCover(dir, posterPath string) bool {
 	}
 	out.Close()
 
-	if ffmpeg.Available() {
+	if ffmpeg.WebPSupported() {
 		webpPath := filepath.Join(dir, "cover.webp")
 		if err := transcode.ConvertToWebP(jpgPath, webpPath); err != nil {
 			slog.Warn("could not convert cover to webp, keeping jpg", "dir", dir, "error", err)

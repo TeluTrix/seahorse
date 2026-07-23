@@ -31,6 +31,7 @@ var (
 
 type Status struct {
 	State         string    `json:"state"` // idle, running, done, error
+	CurrentItem   string    `json:"current_item,omitempty"`
 	MoviesFound   int       `json:"movies_found"`
 	ShowsFound    int       `json:"shows_found"`
 	EpisodesFound int       `json:"episodes_found"`
@@ -42,8 +43,9 @@ type Status struct {
 type Scanner struct {
 	tmdb *tmdb.Client
 
-	mu     sync.Mutex
-	status Status
+	mu          sync.Mutex
+	status      Status
+	subscribers []chan Status
 }
 
 func New(tmdbClient *tmdb.Client) *Scanner {
@@ -56,6 +58,57 @@ func (s *Scanner) Status() Status {
 	return s.status
 }
 
+// Subscribe registers for live status updates, immediately receiving the
+// current status as the first message. The returned cancel func must be
+// called (typically via defer) to unregister and release the channel once
+// the subscriber (an SSE connection) goes away.
+func (s *Scanner) Subscribe() (<-chan Status, func()) {
+	ch := make(chan Status, 8)
+
+	s.mu.Lock()
+	s.subscribers = append(s.subscribers, ch)
+	current := s.status
+	s.mu.Unlock()
+
+	ch <- current
+
+	cancel := func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for i, c := range s.subscribers {
+			if c == ch {
+				s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
+				close(c)
+				break
+			}
+		}
+	}
+	return ch, cancel
+}
+
+// broadcast pushes a status snapshot to every subscriber (a non-blocking
+// send — a subscriber slow enough to fill its buffer just misses an
+// intermediate update, since the next one supersedes it anyway).
+func (s *Scanner) broadcast(snapshot Status, subs []chan Status) {
+	for _, ch := range subs {
+		select {
+		case ch <- snapshot:
+		default:
+		}
+	}
+}
+
+// setStatus mutates the status under lock and broadcasts the result.
+func (s *Scanner) setStatus(mutate func(*Status)) {
+	s.mu.Lock()
+	mutate(&s.status)
+	snapshot := s.status
+	subs := append([]chan Status(nil), s.subscribers...)
+	s.mu.Unlock()
+
+	s.broadcast(snapshot, subs)
+}
+
 var ErrScanInProgress = errors.New("a scan is already running")
 
 // StartScan kicks off a scan in the background. When full is true, all
@@ -64,13 +117,20 @@ var ErrScanInProgress = errors.New("a scan is already running")
 // only folders/episodes not already known are added, and existing metadata
 // is left untouched.
 func (s *Scanner) StartScan(libraryPath string, full bool) error {
+	// The check-and-set must happen atomically under one lock acquisition —
+	// otherwise two concurrent calls could both see "not running" and both
+	// proceed to start a scan.
 	s.mu.Lock()
 	if s.status.State == "running" {
 		s.mu.Unlock()
 		return ErrScanInProgress
 	}
 	s.status = Status{State: "running", StartedAt: time.Now()}
+	snapshot := s.status
+	subs := append([]chan Status(nil), s.subscribers...)
 	s.mu.Unlock()
+
+	s.broadcast(snapshot, subs)
 
 	go s.run(libraryPath, full)
 	return nil
@@ -79,29 +139,27 @@ func (s *Scanner) StartScan(libraryPath string, full bool) error {
 func (s *Scanner) run(libraryPath string, full bool) {
 	if full {
 		if err := wipeAllMedia(); err != nil {
-			s.mu.Lock()
-			s.status.State = "error"
-			s.status.Error = err.Error()
-			s.status.FinishedAt = time.Now()
-			s.mu.Unlock()
+			s.setStatus(func(st *Status) {
+				st.State = "error"
+				st.Error = err.Error()
+				st.FinishedAt = time.Now()
+			})
 			return
 		}
 	}
 
-	movies, shows, episodes, err := s.scan(libraryPath)
+	err := s.scan(libraryPath)
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.status.FinishedAt = time.Now()
-	if err != nil {
-		s.status.State = "error"
-		s.status.Error = err.Error()
-		return
-	}
-	s.status.State = "done"
-	s.status.MoviesFound = movies
-	s.status.ShowsFound = shows
-	s.status.EpisodesFound = episodes
+	s.setStatus(func(st *Status) {
+		st.CurrentItem = ""
+		st.FinishedAt = time.Now()
+		if err != nil {
+			st.State = "error"
+			st.Error = err.Error()
+			return
+		}
+		st.State = "done"
+	})
 }
 
 func removeCoverFiles(dir string) {
@@ -183,7 +241,7 @@ func downloadCover(dir, posterPath string) bool {
 	return true
 }
 
-func (s *Scanner) scan(libraryPath string) (moviesFound, showsFound, episodesFound int, err error) {
+func (s *Scanner) scan(libraryPath string) error {
 	moviesPath := filepath.Join(libraryPath, "movies")
 	tvPath := filepath.Join(libraryPath, "tvshows")
 
@@ -192,13 +250,15 @@ func (s *Scanner) scan(libraryPath string) (moviesFound, showsFound, episodesFou
 			if !entry.IsDir() {
 				continue
 			}
+			s.setStatus(func(st *Status) { st.CurrentItem = "movie: " + entry.Name() })
+
 			added, scanErr := s.scanMovie(moviesPath, entry.Name())
 			if scanErr != nil {
 				slog.Warn("skipping movie folder", "folder", entry.Name(), "error", scanErr)
 				continue
 			}
 			if added {
-				moviesFound++
+				s.setStatus(func(st *Status) { st.MoviesFound++ })
 			}
 		}
 	} else {
@@ -210,21 +270,25 @@ func (s *Scanner) scan(libraryPath string) (moviesFound, showsFound, episodesFou
 			if !entry.IsDir() {
 				continue
 			}
+			s.setStatus(func(st *Status) { st.CurrentItem = "tv show: " + entry.Name() })
+
 			isNewShow, n, scanErr := s.scanTVShow(tvPath, entry.Name())
 			if scanErr != nil {
 				slog.Warn("skipping tv show folder", "folder", entry.Name(), "error", scanErr)
 				continue
 			}
-			if isNewShow {
-				showsFound++
-			}
-			episodesFound += n
+			s.setStatus(func(st *Status) {
+				if isNewShow {
+					st.ShowsFound++
+				}
+				st.EpisodesFound += n
+			})
 		}
 	} else {
 		slog.Warn("could not read tvshows library path", "path", tvPath, "error", readErr)
 	}
 
-	return moviesFound, showsFound, episodesFound, nil
+	return nil
 }
 
 func findVideoFile(dir string) (string, error) {
@@ -346,6 +410,10 @@ func (s *Scanner) scanTVShow(tvRoot, folderName string) (bool, int, error) {
 			continue
 		}
 		seasonNumber, _ := strconv.Atoi(seasonMatch[1])
+
+		s.setStatus(func(st *Status) {
+			st.CurrentItem = fmt.Sprintf("%s: season %d", show.Title, seasonNumber)
+		})
 
 		n, err := s.scanSeason(show, filepath.Join(showFolder, entry.Name()), seasonNumber)
 		if err != nil {

@@ -62,6 +62,7 @@ export type ScanState = 'idle' | 'running' | 'done' | 'error'
 
 export interface ScanStatus {
   state: ScanState
+  current_item?: string
   movies_found: number
   shows_found: number
   episodes_found: number

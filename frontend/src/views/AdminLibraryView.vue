@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import { onUnmounted, ref } from 'vue'
-import { api } from '../api/client'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { api, scanEventsURL } from '../api/client'
 import type { ScanStatus } from '../types'
 
 const status = ref<ScanStatus | null>(null)
 const error = ref('')
-let pollHandle: number | undefined
+let eventSource: EventSource | null = null
 
-function poll() {
-  if (pollHandle) window.clearInterval(pollHandle)
-  pollHandle = window.setInterval(async () => {
-    status.value = await api.scanStatus()
-    if (status.value.state !== 'running' && pollHandle) {
-      window.clearInterval(pollHandle)
-    }
-  }, 2000)
+// A single persistent connection the server pushes updates over — no
+// polling. Opened once on mount (so live status shows up even if a scan is
+// already running, e.g. after a page reload) rather than only around each
+// button click.
+function connect() {
+  eventSource = new EventSource(scanEventsURL())
+  eventSource.onmessage = (event) => {
+    status.value = JSON.parse(event.data)
+  }
 }
 
 async function startScan(full: boolean) {
@@ -23,16 +24,14 @@ async function startScan(full: boolean) {
   }
   error.value = ''
   try {
-    status.value = await api.scanLibrary(full)
-    poll()
+    await api.scanLibrary(full) // status updates arrive over the SSE stream, not this response
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'could not start scan'
   }
 }
 
-onUnmounted(() => {
-  if (pollHandle) window.clearInterval(pollHandle)
-})
+onMounted(connect)
+onBeforeUnmount(() => eventSource?.close())
 </script>
 
 <template>
@@ -53,9 +52,10 @@ onUnmounted(() => {
     <p v-if="error" class="error-message">{{ error }}</p>
     <div v-if="status" class="status">
       <p>Status: <strong>{{ status.state }}</strong></p>
-      <p v-if="status.state === 'done'">
+      <p v-if="status.state === 'running' && status.current_item">Scanning: {{ status.current_item }}</p>
+      <p v-if="status.state === 'running' || status.state === 'done'">
         Found {{ status.movies_found }} movies, {{ status.shows_found }} shows,
-        {{ status.episodes_found }} episodes.
+        {{ status.episodes_found }} episodes{{ status.state === 'running' ? ' so far…' : '.' }}
       </p>
       <p v-if="status.state === 'error'" class="error-message">{{ status.error }}</p>
     </div>

@@ -58,6 +58,7 @@ func main() {
 
 	apiRouter.Handle("/admin/scan", authenticator.RequireAdmin(http.HandlerFunc(handlers.ScanLibrary))).Methods("POST")
 	apiRouter.Handle("/admin/scan/status", authenticator.RequireAdmin(http.HandlerFunc(handlers.ScanStatus))).Methods("GET")
+	apiRouter.Handle("/admin/scan/events", authenticator.RequireAdmin(http.HandlerFunc(handlers.ScanEvents))).Methods("GET")
 	apiRouter.Handle("/admin/users", authenticator.RequireAdmin(http.HandlerFunc(handlers.ListUsers))).Methods("GET")
 	apiRouter.Handle("/admin/users/{id}/password", authenticator.RequireAdmin(http.HandlerFunc(handlers.SetUserPassword))).Methods("PUT")
 

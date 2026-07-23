@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/TeluTrix/seahorse/internal/scanner"
 	"github.com/TeluTrix/seahorse/internal/user"
@@ -29,6 +31,50 @@ func (h *Handlers) ScanLibrary(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) ScanStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.Scanner.Status())
+}
+
+// ScanEvents streams live scan status over Server-Sent Events: a plain,
+// one-way HTTP stream the browser reads with the native EventSource API
+// (which reconnects automatically), instead of the frontend polling this
+// endpoint's REST sibling on a timer.
+func (h *Handlers) ScanEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming not supported")
+		return
+	}
+
+	ch, cancel := h.Scanner.Subscribe()
+	defer cancel()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	heartbeat := time.NewTicker(30 * time.Second)
+	defer heartbeat.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case status, ok := <-ch:
+			if !ok {
+				return
+			}
+			data, err := json.Marshal(status)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		case <-heartbeat.C:
+			fmt.Fprint(w, ": keep-alive\n\n")
+			flusher.Flush()
+		}
+	}
 }
 
 func (h *Handlers) ListUsers(w http.ResponseWriter, r *http.Request) {

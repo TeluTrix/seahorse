@@ -61,7 +61,6 @@ export const api = {
   listTVShows: () => request<TVShow[]>('/tvshows'),
   getTVShow: (id: string) => request<TVShow>(`/tvshows/${id}`),
   scanLibrary: (full = false) => request<ScanStatus>(`/admin/scan${full ? '?mode=full' : ''}`, { method: 'POST' }),
-  scanStatus: () => request<ScanStatus>('/admin/scan/status'),
   listUsers: () => request<PublicUser[]>('/admin/users'),
   setUserPassword: (userId: string, newPassword: string) =>
     request<{ ok: boolean }>(`/admin/users/${userId}/password`, {
@@ -103,6 +102,13 @@ export function coverURL(kind: 'movies' | 'tvshows', id: string): string {
 export function subtitleURL(kind: 'movies' | 'episodes', id: string, trackId: string): string {
   const token = localStorage.getItem(TOKEN_KEY) ?? ''
   return `${BASE}/subtitles/${kind}/${id}/vtt?track=${encodeURIComponent(trackId)}&token=${encodeURIComponent(token)}`
+}
+
+// EventSource can't set an Authorization header either, so the live scan
+// status stream also takes the token as a query param.
+export function scanEventsURL(): string {
+  const token = localStorage.getItem(TOKEN_KEY) ?? ''
+  return `${BASE}/admin/scan/events?token=${encodeURIComponent(token)}`
 }
 
 export { TOKEN_KEY }

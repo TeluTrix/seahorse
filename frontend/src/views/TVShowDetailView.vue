@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, coverURL } from '../api/client'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import CastList from '../components/CastList.vue'
+import RemuxStatusBadge from '../components/RemuxStatusBadge.vue'
 import { useConfigStore } from '../stores/config'
 import type { Episode, TVShow } from '../types'
 import { formatRuntime, formatTime } from '../utils/format'
@@ -135,6 +136,7 @@ function playEpisode(id: string, restart: boolean) {
           <div class="episode-info" @click="playEpisode(ep.id, !!ep.progress?.completed)">
             <strong>{{ ep.episode_number }}. {{ ep.title }}</strong>
             <span v-if="ep.runtime_minutes" class="runtime">{{ formatRuntime(ep.runtime_minutes) }}</span>
+            <RemuxStatusBadge :status="ep.remux_status" class="remux-notice" />
             <p>{{ ep.overview }}</p>
           </div>
           <div class="episode-actions">
@@ -264,6 +266,9 @@ function playEpisode(id: string, restart: boolean) {
 .runtime {
   color: var(--text-dim);
   font-size: 0.85rem;
+  margin-left: 0.5rem;
+}
+.remux-notice {
   margin-left: 0.5rem;
 }
 .episode-actions {

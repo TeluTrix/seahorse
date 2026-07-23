@@ -43,6 +43,14 @@ func toProgressDTO(wp *models.WatchProgress) *ProgressDTO {
 	}
 }
 
+// remuxStatusLookup resolves a movie/episode ID to its current audio-remux
+// state ("pending", "active", or "" if none) — see scanner.Scanner.RemuxState.
+// Passed as a function rather than importing the scanner package directly,
+// and left as noRemuxStatus for list/search results where it isn't shown.
+type remuxStatusLookup func(uuid.UUID) string
+
+func noRemuxStatus(uuid.UUID) string { return "" }
+
 func moviePosterURL(m models.Movie) string {
 	if m.CoverCached {
 		return fmt.Sprintf("/api/images/movies/%s/cover", m.ID)
@@ -99,12 +107,13 @@ type MovieDTO struct {
 	Director      string          `json:"director,omitempty"`
 	Cast          []CastMemberDTO `json:"cast,omitempty"`
 	Progress      *ProgressDTO    `json:"progress,omitempty"`
+	RemuxStatus   string          `json:"remux_status,omitempty"`
 }
 
 // toMovieDTO builds the movie DTO. includeCast is false for list/search
 // results (cast isn't rendered on poster cards, so there's no reason to
 // bloat those payloads with it) and true for the single-movie detail view.
-func toMovieDTO(m models.Movie, wp *models.WatchProgress, includeCast bool) MovieDTO {
+func toMovieDTO(m models.Movie, wp *models.WatchProgress, includeCast bool, remuxStatus remuxStatusLookup) MovieDTO {
 	dto := MovieDTO{
 		ID:            m.ID,
 		Title:         m.Title,
@@ -118,6 +127,7 @@ func toMovieDTO(m models.Movie, wp *models.WatchProgress, includeCast bool) Movi
 		Runtime:       m.Runtime,
 		Director:      m.Director,
 		Progress:      toProgressDTO(wp),
+		RemuxStatus:   remuxStatus(m.ID),
 	}
 	if includeCast {
 		dto.Cast = decodeCast(m.Cast)
@@ -133,9 +143,10 @@ type EpisodeDTO struct {
 	StillURL      string       `json:"still_url"`
 	Runtime       int          `json:"runtime_minutes,omitempty"`
 	Progress      *ProgressDTO `json:"progress,omitempty"`
+	RemuxStatus   string       `json:"remux_status,omitempty"`
 }
 
-func toEpisodeDTO(e models.Episode, wp *models.WatchProgress) EpisodeDTO {
+func toEpisodeDTO(e models.Episode, wp *models.WatchProgress, remuxStatus remuxStatusLookup) EpisodeDTO {
 	return EpisodeDTO{
 		ID:            e.ID,
 		EpisodeNumber: e.EpisodeNumber,
@@ -144,6 +155,7 @@ func toEpisodeDTO(e models.Episode, wp *models.WatchProgress) EpisodeDTO {
 		StillURL:      tmdb.ImageURL(e.StillPath, "w300"),
 		Runtime:       e.Runtime,
 		Progress:      toProgressDTO(wp),
+		RemuxStatus:   remuxStatus(e.ID),
 	}
 }
 
@@ -153,14 +165,14 @@ type SeasonDTO struct {
 	Episodes     []EpisodeDTO `json:"episodes"`
 }
 
-func toSeasonDTO(s models.Season, progressByEpisode map[uuid.UUID]models.WatchProgress) SeasonDTO {
+func toSeasonDTO(s models.Season, progressByEpisode map[uuid.UUID]models.WatchProgress, remuxStatus remuxStatusLookup) SeasonDTO {
 	episodes := make([]EpisodeDTO, 0, len(s.Episodes))
 	for _, e := range s.Episodes {
 		var wp *models.WatchProgress
 		if p, ok := progressByEpisode[e.ID]; ok {
 			wp = &p
 		}
-		episodes = append(episodes, toEpisodeDTO(e, wp))
+		episodes = append(episodes, toEpisodeDTO(e, wp, remuxStatus))
 	}
 	return SeasonDTO{ID: s.ID, SeasonNumber: s.SeasonNumber, Episodes: episodes}
 }
@@ -181,11 +193,12 @@ type TVShowDTO struct {
 }
 
 // toTVShowDTO builds the show DTO. See toMovieDTO for why includeCast is
-// only set for the single-show detail view.
-func toTVShowDTO(t models.TVShow, progressByEpisode map[uuid.UUID]models.WatchProgress, includeCast bool) TVShowDTO {
+// only set for the single-show detail view; remuxStatus is likewise
+// noRemuxStatus outside the detail view.
+func toTVShowDTO(t models.TVShow, progressByEpisode map[uuid.UUID]models.WatchProgress, includeCast bool, remuxStatus remuxStatusLookup) TVShowDTO {
 	seasons := make([]SeasonDTO, 0, len(t.Seasons))
 	for _, s := range t.Seasons {
-		seasons = append(seasons, toSeasonDTO(s, progressByEpisode))
+		seasons = append(seasons, toSeasonDTO(s, progressByEpisode, remuxStatus))
 	}
 	dto := TVShowDTO{
 		ID:            t.ID,

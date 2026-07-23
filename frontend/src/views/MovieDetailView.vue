@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, coverURL } from '../api/client'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import CastList from '../components/CastList.vue'
+import RemuxStatusBadge from '../components/RemuxStatusBadge.vue'
 import { useConfigStore } from '../stores/config'
 import type { Movie } from '../types'
 import { formatRuntime, formatTime } from '../utils/format'
@@ -49,6 +50,7 @@ function play(restart: boolean) {
             · ⭐ {{ movie.vote_average.toFixed(1) }} · {{ movie.genres }}
           </p>
           <p v-if="movie.director" class="director">Directed by {{ movie.director }}</p>
+          <RemuxStatusBadge :status="movie.remux_status" class="remux-notice" />
           <p class="overview">{{ movie.overview }}</p>
           <div class="actions">
             <template v-if="hasResumePoint">
@@ -92,6 +94,11 @@ function play(restart: boolean) {
   opacity: 0.8;
   margin-bottom: 1rem;
   font-size: 0.9rem;
+}
+.remux-notice {
+  display: block;
+  width: fit-content;
+  margin-bottom: 1rem;
 }
 .overview {
   margin-bottom: 1.5rem;

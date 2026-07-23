@@ -52,7 +52,7 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 			if p, ok := progressByMovie[m.ID]; ok {
 				wp = &p
 			}
-			movieDTOs = append(movieDTOs, toMovieDTO(m, wp, false))
+			movieDTOs = append(movieDTOs, toMovieDTO(m, wp, false, noRemuxStatus))
 		}
 	}
 
@@ -81,7 +81,7 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 		}
 		showDTOs = make([]TVShowDTO, 0, len(shows))
 		for _, s := range shows {
-			showDTOs = append(showDTOs, toTVShowDTO(s, nil, false))
+			showDTOs = append(showDTOs, toTVShowDTO(s, nil, false, noRemuxStatus))
 		}
 	}
 

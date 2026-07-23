@@ -55,6 +55,15 @@ type Status struct {
 	FinishedAt    time.Time  `json:"finished_at,omitempty"`
 }
 
+// remuxTask is one backlogged transcode.RemuxAudio job, discovered during a
+// scan's metadata-import pass but not run until that pass fully completes
+// (see processBacklog) — so heavy remux I/O never competes with directory
+// walking, TMDB calls, or cover downloads for the rest of the library.
+type remuxTask struct {
+	MediaID  uuid.UUID
+	FilePath string
+}
+
 type Scanner struct {
 	tmdb *tmdb.Client
 
@@ -69,6 +78,17 @@ type Scanner struct {
 	// wait for all its outstanding remux jobs to finish before reporting done.
 	remuxSlots chan struct{}
 	remuxWG    sync.WaitGroup
+
+	// remuxBacklog collects pending remux jobs during the metadata-import
+	// pass (see queueRemux); processBacklog drains it afterward.
+	remuxBacklog []remuxTask
+	// mediaRemuxState tracks "pending"/"active" per movie/episode ID so the
+	// API can tell a detail page's viewer "this file's audio fix hasn't run
+	// yet" instead of it just silently not working. Absent (no entry) means
+	// no remux is needed or it already finished. Lost on restart, same as
+	// the rest of the scanner's in-memory state — harmless, since a future
+	// scan naturally re-detects and re-queues any file that still needs it.
+	mediaRemuxState map[uuid.UUID]string
 
 	transcodeOpts transcode.Options
 }
@@ -113,27 +133,76 @@ func (s *Scanner) clearRemuxJob(file string) {
 	})
 }
 
-// queueRemux runs an audio remux of path in the background, bounded by
-// remuxSlots. Errors are logged, not returned, matching the previous inline
-// behavior where a failed remux never aborted the scan.
-func (s *Scanner) queueRemux(path string) {
-	s.remuxWG.Add(1)
-	go func() {
-		defer s.remuxWG.Done()
-		s.remuxSlots <- struct{}{}
-		defer func() { <-s.remuxSlots }()
+// queueRemux records a backlogged remux job for mediaID/path. It does not
+// start any work itself — see processBacklog, which runs everything queued
+// this way after the scan's metadata-import pass finishes.
+func (s *Scanner) queueRemux(mediaID uuid.UUID, path string) {
+	s.mu.Lock()
+	s.remuxBacklog = append(s.remuxBacklog, remuxTask{MediaID: mediaID, FilePath: path})
+	if s.mediaRemuxState == nil {
+		s.mediaRemuxState = map[uuid.UUID]string{}
+	}
+	s.mediaRemuxState[mediaID] = "pending"
+	s.mu.Unlock()
+}
 
-		base := filepath.Base(path)
-		s.setStatus(func(st *Status) { st.CurrentItem = "remuxing audio: " + base })
-		s.setRemuxProgress(base, 0)
-		defer s.clearRemuxJob(base)
+// setMediaRemuxState upserts (or, for state == "", clears) the remux state
+// tracked for mediaID.
+func (s *Scanner) setMediaRemuxState(mediaID uuid.UUID, state string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if state == "" {
+		delete(s.mediaRemuxState, mediaID)
+		return
+	}
+	if s.mediaRemuxState == nil {
+		s.mediaRemuxState = map[uuid.UUID]string{}
+	}
+	s.mediaRemuxState[mediaID] = state
+}
 
-		if err := transcode.RemuxAudio(path, s.transcodeOpts, func(percent float64) {
-			s.setRemuxProgress(base, percent)
-		}); err != nil {
-			slog.Warn("could not remux incompatible audio", "file", path, "error", err)
-		}
-	}()
+// RemuxState reports whether mediaID (a movie or episode ID) currently has
+// a backlogged ("pending") or in-flight ("active") audio remux, or "" if
+// neither (no fix needed, or it already finished).
+func (s *Scanner) RemuxState(mediaID uuid.UUID) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mediaRemuxState[mediaID]
+}
+
+// processBacklog runs every remux job queued via queueRemux since the last
+// call, bounded by remuxSlots, and blocks until they've all finished.
+// Errors are logged, not returned, matching the previous inline behavior
+// where a failed remux never aborted the scan.
+func (s *Scanner) processBacklog() {
+	s.mu.Lock()
+	backlog := s.remuxBacklog
+	s.remuxBacklog = nil
+	s.mu.Unlock()
+
+	for _, task := range backlog {
+		s.remuxWG.Add(1)
+		go func(task remuxTask) {
+			defer s.remuxWG.Done()
+			s.remuxSlots <- struct{}{}
+			defer func() { <-s.remuxSlots }()
+
+			base := filepath.Base(task.FilePath)
+			s.setStatus(func(st *Status) { st.CurrentItem = "remuxing audio: " + base })
+			s.setRemuxProgress(base, 0)
+			s.setMediaRemuxState(task.MediaID, "active")
+			defer s.clearRemuxJob(base)
+			defer s.setMediaRemuxState(task.MediaID, "")
+
+			if err := transcode.RemuxAudio(task.FilePath, s.transcodeOpts, func(percent float64) {
+				s.setRemuxProgress(base, percent)
+			}); err != nil {
+				slog.Warn("could not remux incompatible audio", "file", task.FilePath, "error", err)
+			}
+		}(task)
+	}
+
+	s.remuxWG.Wait()
 }
 
 func (s *Scanner) Status() Status {
@@ -234,8 +303,8 @@ func (s *Scanner) run(libraryPath string, full bool) {
 
 	err := s.scan(libraryPath)
 
-	s.setStatus(func(st *Status) { st.CurrentItem = "finishing audio remux jobs" })
-	s.remuxWG.Wait()
+	s.setStatus(func(st *Status) { st.CurrentItem = "processing audio remux backlog" })
+	s.processBacklog()
 
 	s.setStatus(func(st *Status) {
 		st.CurrentItem = ""
@@ -446,14 +515,15 @@ func (s *Scanner) scanMovie(moviesRoot, folderName string) (bool, error) {
 		return false, err
 	}
 
+	movieID := uuid.New()
 	if needsFix, err := transcode.NeedsAudioRemux(videoFile, s.transcodeOpts); err != nil {
 		slog.Warn("could not probe audio codec", "file", videoFile, "error", err)
 	} else if needsFix {
-		s.queueRemux(videoFile)
+		s.queueRemux(movieID, videoFile)
 	}
 
 	movie := models.Movie{
-		ID:           uuid.New(),
+		ID:           movieID,
 		FilePath:     videoFile,
 		TMDBID:       meta.TMDBID,
 		Title:        meta.Title,
@@ -634,7 +704,7 @@ func (s *Scanner) scanSeason(show models.TVShow, seasonPath string, seasonNumber
 		if needsFix, err := transcode.NeedsAudioRemux(p.filePath, s.transcodeOpts); err != nil {
 			slog.Warn("could not probe audio codec", "file", p.filePath, "error", err)
 		} else if needsFix {
-			s.queueRemux(p.filePath)
+			s.queueRemux(episode.ID, p.filePath)
 		}
 
 		if err := db.DB.Create(&episode).Error; err != nil {

@@ -48,6 +48,7 @@ export interface Movie {
   director?: string
   cast?: CastMember[]
   progress?: Progress
+  remux_status?: 'pending' | 'active'
 }
 
 export interface Episode {
@@ -58,6 +59,7 @@ export interface Episode {
   still_url: string
   runtime_minutes?: number
   progress?: Progress
+  remux_status?: 'pending' | 'active'
 }
 
 export interface Season {

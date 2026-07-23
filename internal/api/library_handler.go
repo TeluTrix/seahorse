@@ -44,7 +44,7 @@ func (h *Handlers) ListMovies(w http.ResponseWriter, r *http.Request) {
 		if p, ok := progressByMovie[m.ID]; ok {
 			wp = &p
 		}
-		dtos = append(dtos, toMovieDTO(m, wp, false))
+		dtos = append(dtos, toMovieDTO(m, wp, false, noRemuxStatus))
 	}
 	writeJSON(w, http.StatusOK, MoviesPageDTO{Movies: dtos, Page: page, PageSize: pageSize, Total: total})
 }
@@ -89,7 +89,7 @@ func (h *Handlers) GetMovie(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, toMovieDTO(movie, wp, true))
+	writeJSON(w, http.StatusOK, toMovieDTO(movie, wp, true, h.Scanner.RemuxState))
 }
 
 func (h *Handlers) ListTVShows(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +113,7 @@ func (h *Handlers) ListTVShows(w http.ResponseWriter, r *http.Request) {
 
 	dtos := make([]TVShowDTO, 0, len(shows))
 	for _, s := range shows {
-		dtos = append(dtos, toTVShowDTO(s, nil, false))
+		dtos = append(dtos, toTVShowDTO(s, nil, false, noRemuxStatus))
 	}
 	writeJSON(w, http.StatusOK, TVShowsPageDTO{TVShows: dtos, Page: page, PageSize: pageSize, Total: total})
 }
@@ -156,5 +156,5 @@ func (h *Handlers) GetTVShow(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, toTVShowDTO(show, progressByEpisode, true))
+	writeJSON(w, http.StatusOK, toTVShowDTO(show, progressByEpisode, true, h.Scanner.RemuxState))
 }

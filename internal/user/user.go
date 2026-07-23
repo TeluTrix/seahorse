@@ -1,58 +1,71 @@
 package user
 
 import (
+	"errors"
 	"time"
 
+	"github.com/TeluTrix/seahorse/internal/auth"
 	"github.com/TeluTrix/seahorse/internal/db"
 	"github.com/TeluTrix/seahorse/internal/models"
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
-type User struct {
-	UserID       uuid.UUID `json:"user_id"`
-	UserEmail    string    `json:"user_email"`
-	UserRole     string    `json:"user_role"`
-	UserPassword string    `json:"-"`
-}
+var ErrInvalidCredentials = errors.New("invalid email or password")
 
-func HashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
-	return string(bytes), err
-}
-
-func CheckPasswordHash(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
-}
-
-func convertToSchema(user User) models.User {
-	var userToStore models.User
-
-	userToStore.CreatedAt = time.Now()
-	userToStore.UpdatedAt = time.Now()
-	userToStore.UserID = uuid.New()
-	userToStore.UserEmail = user.UserEmail
-	userToStore.UserRole = user.UserRole
-	userToStore.UserPassword = user.UserPassword
-
-	return userToStore
-}
-
-func CreateUser(userIn User) error {
-	hashedPassword, err := HashPassword(userIn.UserPassword)
+func CreateUser(email, password string) (models.User, error) {
+	hashed, err := auth.HashPassword(password)
 	if err != nil {
-		return err
+		return models.User{}, err
 	}
 
-	userIn.UserPassword = hashedPassword
-
-	user := convertToSchema(userIn)
-
-	result := db.DB.Create(&user)
-	if result.Error != nil {
-		return result.Error
+	var count int64
+	if err := db.DB.Model(&models.User{}).Count(&count).Error; err != nil {
+		return models.User{}, err
 	}
 
-	return nil
+	role := models.RoleUser
+	if count == 0 {
+		role = models.RoleAdmin
+	}
+
+	newUser := models.User{
+		UserID:       uuid.New(),
+		UserEmail:    email,
+		UserPassword: hashed,
+		UserRole:     role,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := db.DB.Create(&newUser).Error; err != nil {
+		return models.User{}, err
+	}
+
+	return newUser, nil
+}
+
+func Authenticate(email, password string) (models.User, error) {
+	var u models.User
+	if err := db.DB.Where("user_email = ?", email).First(&u).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return models.User{}, ErrInvalidCredentials
+		}
+		return models.User{}, err
+	}
+
+	match, err := auth.VerifyPassword(password, u.UserPassword)
+	if err != nil || !match {
+		return models.User{}, ErrInvalidCredentials
+	}
+
+	return u, nil
+}
+
+func GetByID(id uuid.UUID) (models.User, error) {
+	var u models.User
+	if err := db.DB.First(&u, "user_id = ?", id).Error; err != nil {
+		return models.User{}, err
+	}
+	return u, nil
 }

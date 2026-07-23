@@ -30,6 +30,16 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+.DS_Store
 
 # Databases
 *.db
+
+# Build output
+/bin/
+
+# Frontend
+frontend/node_modules/
+internal/web/dist/*
+!internal/web/dist/index.html
+library/

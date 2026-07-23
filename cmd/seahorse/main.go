@@ -39,7 +39,7 @@ func main() {
 		ResumeThresholdSeconds:        cfg.ResumeThresholdSeconds,
 		ProgressReportIntervalSeconds: cfg.ProgressReportIntervalSeconds,
 	}
-	handlers := api.NewHandlers(authenticator, libraryScanner, cfg.LibraryPath, cfg.MaxPageSize, clientConfig)
+	handlers := api.NewHandlers(authenticator, libraryScanner, cfg.LibraryPath, cfg.MaxPageSize, cfg.DisableRegistration, clientConfig)
 
 	r := mux.NewRouter()
 
@@ -76,6 +76,7 @@ func main() {
 	apiRouter.Handle("/admin/scan/status", authenticator.RequireAdmin(http.HandlerFunc(handlers.ScanStatus))).Methods("GET")
 	apiRouter.Handle("/admin/scan/events", authenticator.RequireAdmin(http.HandlerFunc(handlers.ScanEvents))).Methods("GET")
 	apiRouter.Handle("/admin/users", authenticator.RequireAdmin(http.HandlerFunc(handlers.ListUsers))).Methods("GET")
+	apiRouter.Handle("/admin/users", authenticator.RequireAdmin(http.HandlerFunc(handlers.CreateUser))).Methods("POST")
 	apiRouter.Handle("/admin/users/{id}/password", authenticator.RequireAdmin(http.HandlerFunc(handlers.SetUserPassword))).Methods("PUT")
 
 	r.PathPrefix("/").Handler(web.Handler())

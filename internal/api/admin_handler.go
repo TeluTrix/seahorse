@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/TeluTrix/seahorse/internal/scanner"
 	"github.com/TeluTrix/seahorse/internal/user"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"gorm.io/gorm"
 )
 
 func (h *Handlers) ScanLibrary(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +91,40 @@ func (h *Handlers) ListUsers(w http.ResponseWriter, r *http.Request) {
 		dtos = append(dtos, toPublicUser(u))
 	}
 	writeJSON(w, http.StatusOK, dtos)
+}
+
+type createUserRequest struct {
+	Email    string `json:"user_email"`
+	Password string `json:"user_password"`
+}
+
+// CreateUser lets an admin manually create an account, independent of
+// SEAHORSE_DISABLE_REGISTRATION — that setting only gates the public
+// self-service /auth/register endpoint, not this admin-only one.
+func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var req createUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	if req.Email == "" || len(req.Password) < 8 {
+		writeError(w, http.StatusBadRequest, "email is required and password must be at least 8 characters")
+		return
+	}
+
+	newUser, err := user.CreateUser(req.Email, req.Password)
+	if err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "UNIQUE constraint") {
+			writeError(w, http.StatusConflict, "a user with that email already exists")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "could not create user")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, toPublicUser(newUser))
 }
 
 type setUserPasswordRequest struct {

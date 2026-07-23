@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useConfigStore } from '../stores/config'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import HomeView from '../views/HomeView.vue'
@@ -47,6 +48,9 @@ router.beforeEach((to) => {
   }
   if (to.meta.requiresAdmin && !auth.isAdmin) {
     return { name: 'home' }
+  }
+  if (to.name === 'register' && !useConfigStore().registrationEnabled) {
+    return { name: 'login' }
   }
   return true
 })

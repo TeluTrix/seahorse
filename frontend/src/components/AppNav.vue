@@ -2,9 +2,11 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useConfigStore } from '../stores/config'
 import { APP_VERSION } from '../version'
 
 const auth = useAuthStore()
+const config = useConfigStore()
 const router = useRouter()
 const searchQuery = ref('')
 
@@ -42,7 +44,7 @@ function submitSearch() {
     </template>
     <template v-else>
       <RouterLink to="/login">Login</RouterLink>
-      <RouterLink to="/register">Register</RouterLink>
+      <RouterLink v-if="config.registrationEnabled" to="/register">Register</RouterLink>
     </template>
   </nav>
 </template>

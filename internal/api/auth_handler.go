@@ -38,6 +38,14 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// registrationEnabled always allows the very first (bootstrap admin)
+	// account regardless of SEAHORSE_DISABLE_REGISTRATION — otherwise a
+	// fresh install with that set would have no way to ever create a user.
+	if !h.registrationEnabled() {
+		writeError(w, http.StatusForbidden, "registration is disabled")
+		return
+	}
+
 	newUser, err := user.CreateUser(req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "UNIQUE constraint") {

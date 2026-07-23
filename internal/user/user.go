@@ -13,14 +13,21 @@ import (
 
 var ErrInvalidCredentials = errors.New("invalid email or password")
 
+// Count returns the total number of registered users.
+func Count() (int64, error) {
+	var count int64
+	err := db.DB.Model(&models.User{}).Count(&count).Error
+	return count, err
+}
+
 func CreateUser(email, password string) (models.User, error) {
 	hashed, err := auth.HashPassword(password)
 	if err != nil {
 		return models.User{}, err
 	}
 
-	var count int64
-	if err := db.DB.Model(&models.User{}).Count(&count).Error; err != nil {
+	count, err := Count()
+	if err != nil {
 		return models.User{}, err
 	}
 

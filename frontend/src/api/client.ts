@@ -87,6 +87,11 @@ export const api = {
   getConfig: () => request<ClientConfig>('/config'),
   scanLibrary: (full = false) => request<ScanStatus>(`/admin/scan${full ? '?mode=full' : ''}`, { method: 'POST' }),
   listUsers: () => request<PublicUser[]>('/admin/users'),
+  createUser: (email: string, password: string) =>
+    request<PublicUser>('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({ user_email: email, user_password: password }),
+    }),
   setUserPassword: (userId: string, newPassword: string) =>
     request<{ ok: boolean }>(`/admin/users/${userId}/password`, {
       method: 'PUT',

@@ -6,6 +6,7 @@ export interface ClientConfig {
   player_seek_seconds: number
   resume_threshold_seconds: number
   progress_report_interval_seconds: number
+  registration_enabled: boolean
 }
 
 export type Role = 'user' | 'admin'

@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -17,7 +18,8 @@ type Config struct {
 	TMDBAPIKey  string
 	JWTSecret   string
 
-	RemuxConcurrency int
+	RemuxConcurrency    int
+	DisableRegistration bool
 
 	JWTTTL            time.Duration
 	TMDBTimeout       time.Duration
@@ -58,6 +60,25 @@ func envString(key, def string) string {
 	return def
 }
 
+// envBool reads key as a boolean ("true"/"1"/"yes"/"on", case-insensitive,
+// for true), falling back to def (with a warning) if it's unset or
+// unrecognized.
+func envBool(key string, def bool) bool {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def
+	}
+	switch strings.ToLower(raw) {
+	case "true", "1", "yes", "on":
+		return true
+	case "false", "0", "no", "off":
+		return false
+	default:
+		log.Printf("warning: invalid %s %q, defaulting to %v", key, raw, def)
+		return def
+	}
+}
+
 func Load() Config {
 	if err := godotenv.Load(); err != nil {
 		log.Println("no .env file found, relying on process environment")
@@ -89,6 +110,7 @@ func Load() Config {
 	}
 
 	cfg.RemuxConcurrency = envInt("SEAHORSE_REMUX_CONCURRENCY", 1)
+	cfg.DisableRegistration = envBool("SEAHORSE_DISABLE_REGISTRATION", false)
 
 	cfg.JWTTTL = time.Duration(envInt("SEAHORSE_JWT_TTL_HOURS", 24)) * time.Hour
 	cfg.TMDBTimeout = time.Duration(envInt("SEAHORSE_TMDB_TIMEOUT_SECONDS", 10)) * time.Second

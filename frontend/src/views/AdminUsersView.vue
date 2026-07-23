@@ -10,6 +10,12 @@ const newPassword = ref('')
 const errors = reactive<Record<string, string>>({})
 const successId = ref<string | null>(null)
 
+const showCreateForm = ref(false)
+const newUserEmail = ref('')
+const newUserPassword = ref('')
+const createError = ref('')
+const creating = ref(false)
+
 async function load() {
   loading.value = true
   try {
@@ -20,6 +26,35 @@ async function load() {
 }
 
 onMounted(load)
+
+function startCreate() {
+  showCreateForm.value = true
+  newUserEmail.value = ''
+  newUserPassword.value = ''
+  createError.value = ''
+}
+
+function cancelCreate() {
+  showCreateForm.value = false
+}
+
+async function createUser() {
+  createError.value = ''
+  if (newUserPassword.value.length < 8) {
+    createError.value = 'Password must be at least 8 characters'
+    return
+  }
+  creating.value = true
+  try {
+    await api.createUser(newUserEmail.value, newUserPassword.value)
+    showCreateForm.value = false
+    await load()
+  } catch (e) {
+    createError.value = e instanceof Error ? e.message : 'could not create user'
+  } finally {
+    creating.value = false
+  }
+}
 
 function startEdit(userId: string) {
   editingId.value = userId
@@ -53,6 +88,18 @@ async function savePassword(userId: string) {
 <template>
   <div class="admin">
     <h1>Users</h1>
+
+    <div v-if="!showCreateForm">
+      <button @click="startCreate">+ Create user</button>
+    </div>
+    <form v-else class="create-form" @submit.prevent="createUser">
+      <input v-model="newUserEmail" type="email" placeholder="Email" required autocomplete="off" />
+      <input v-model="newUserPassword" type="password" placeholder="Password (min. 8 characters)" required />
+      <button type="submit" :disabled="creating">{{ creating ? 'Creating…' : 'Create' }}</button>
+      <button type="button" class="secondary" @click="cancelCreate">Cancel</button>
+    </form>
+    <p v-if="createError" class="error-message">{{ createError }}</p>
+
     <div v-if="loading" class="spinner" />
     <table v-else class="users-table">
       <thead>
@@ -89,6 +136,14 @@ async function savePassword(userId: string) {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+.create-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.create-form input {
+  width: 220px;
 }
 .users-table {
   width: 100%;

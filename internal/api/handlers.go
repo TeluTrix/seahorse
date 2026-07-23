@@ -10,10 +10,11 @@ import (
 // static bundle, so it can't read the server's env vars directly — instead
 // it fetches these once from GET /api/config (see GetConfig).
 type ClientConfig struct {
-	DefaultPageSize               int `json:"default_page_size"`
-	PlayerSeekSeconds             int `json:"player_seek_seconds"`
-	ResumeThresholdSeconds        int `json:"resume_threshold_seconds"`
-	ProgressReportIntervalSeconds int `json:"progress_report_interval_seconds"`
+	DefaultPageSize               int  `json:"default_page_size"`
+	PlayerSeekSeconds             int  `json:"player_seek_seconds"`
+	ResumeThresholdSeconds        int  `json:"resume_threshold_seconds"`
+	ProgressReportIntervalSeconds int  `json:"progress_report_interval_seconds"`
+	RegistrationEnabled           bool `json:"registration_enabled"`
 }
 
 type Handlers struct {
@@ -21,16 +22,18 @@ type Handlers struct {
 	Scanner     *scanner.Scanner
 	LibraryPath string
 
-	MaxPageSize  int
-	ClientConfig ClientConfig
+	MaxPageSize         int
+	DisableRegistration bool
+	ClientConfig        ClientConfig
 }
 
-func NewHandlers(a *auth.Authenticator, s *scanner.Scanner, libraryPath string, maxPageSize int, clientConfig ClientConfig) *Handlers {
+func NewHandlers(a *auth.Authenticator, s *scanner.Scanner, libraryPath string, maxPageSize int, disableRegistration bool, clientConfig ClientConfig) *Handlers {
 	return &Handlers{
-		Auth:         a,
-		Scanner:      s,
-		LibraryPath:  libraryPath,
-		MaxPageSize:  maxPageSize,
-		ClientConfig: clientConfig,
+		Auth:                a,
+		Scanner:             s,
+		LibraryPath:         libraryPath,
+		MaxPageSize:         maxPageSize,
+		DisableRegistration: disableRegistration,
+		ClientConfig:        clientConfig,
 	}
 }

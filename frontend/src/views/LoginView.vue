@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useConfigStore } from '../stores/config'
 
 const email = ref('')
 const password = ref('')
@@ -9,6 +10,7 @@ const error = ref('')
 const loading = ref(false)
 
 const auth = useAuthStore()
+const config = useConfigStore()
 const router = useRouter()
 
 async function handleSubmit() {
@@ -36,7 +38,7 @@ async function handleSubmit() {
       <p v-if="error" class="error-message">{{ error }}</p>
       <button type="submit" :disabled="loading">{{ loading ? 'Logging in…' : 'Log in' }}</button>
     </form>
-    <p>No account yet? <RouterLink to="/register">Register</RouterLink></p>
+    <p v-if="config.registrationEnabled">No account yet? <RouterLink to="/register">Register</RouterLink></p>
   </div>
 </template>
 

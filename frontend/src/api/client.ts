@@ -14,6 +14,7 @@ import type {
 
 const BASE = '/api'
 const TOKEN_KEY = 'seahorse_token'
+export const DEFAULT_PAGE_SIZE = 48
 
 function authHeaders(): Record<string, string> {
   const token = localStorage.getItem(TOKEN_KEY)
@@ -59,19 +60,27 @@ export const api = {
       body: JSON.stringify({ user_email: email, user_password: password }),
     }),
   me: () => request<PublicUser>('/user/me'),
-  listMovies: (page = 1, pageSize = 50) =>
-    request<MoviesPage>(`/movies?page=${page}&page_size=${pageSize}`),
+  listMovies: (page = 1, pageSize = DEFAULT_PAGE_SIZE, sort?: 'newest') =>
+    request<MoviesPage>(`/movies?page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}`),
   getMovie: (id: string) => request<Movie>(`/movies/${id}`),
-  listTVShows: (page = 1, pageSize = 50) =>
-    request<TVShowsPage>(`/tvshows?page=${page}&page_size=${pageSize}`),
+  listTVShows: (page = 1, pageSize = DEFAULT_PAGE_SIZE, sort?: 'newest') =>
+    request<TVShowsPage>(`/tvshows?page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}`),
   getTVShow: (id: string) => request<TVShow>(`/tvshows/${id}`),
-  search: (params: { q?: string; year?: string; genre?: string; page?: number; pageSize?: number }) => {
+  search: (params: {
+    q?: string
+    year?: string
+    genre?: string
+    type?: 'movies' | 'tvshows'
+    page?: number
+    pageSize?: number
+  }) => {
     const query = new URLSearchParams()
     if (params.q) query.set('q', params.q)
     if (params.year) query.set('year', params.year)
     if (params.genre) query.set('genre', params.genre)
+    if (params.type) query.set('type', params.type)
     query.set('page', String(params.page ?? 1))
-    query.set('page_size', String(params.pageSize ?? 50))
+    query.set('page_size', String(params.pageSize ?? DEFAULT_PAGE_SIZE))
     return request<SearchResult>(`/search?${query.toString()}`)
   },
   listGenres: () => request<string[]>('/genres'),

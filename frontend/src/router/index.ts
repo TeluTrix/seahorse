@@ -4,6 +4,8 @@ import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import HomeView from '../views/HomeView.vue'
 import SearchView from '../views/SearchView.vue'
+import MoviesView from '../views/MoviesView.vue'
+import TVShowsView from '../views/TVShowsView.vue'
 import MovieDetailView from '../views/MovieDetailView.vue'
 import TVShowDetailView from '../views/TVShowDetailView.vue'
 import PlayerView from '../views/PlayerView.vue'
@@ -18,6 +20,8 @@ const router = createRouter({
     { path: '/register', name: 'register', component: RegisterView, meta: { public: true } },
     { path: '/', name: 'home', component: HomeView },
     { path: '/search', name: 'search', component: SearchView },
+    { path: '/movies', name: 'movies-overview', component: MoviesView },
+    { path: '/tvshows', name: 'tvshows-overview', component: TVShowsView },
     { path: '/movies/:id', name: 'movie', component: MovieDetailView, props: true },
     { path: '/tvshows/:id', name: 'tvshow', component: TVShowDetailView, props: true },
     { path: '/watch/movie/:id', name: 'watch-movie', component: PlayerView, props: true },

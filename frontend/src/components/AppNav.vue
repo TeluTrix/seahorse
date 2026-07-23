@@ -22,7 +22,10 @@ function submitSearch() {
 
 <template>
   <nav class="app-nav">
-    <RouterLink to="/" class="brand">seahorse<span class="version">v{{ APP_VERSION }}</span></RouterLink>
+    <RouterLink to="/" class="brand">
+      <img src="/logo.svg" alt="" class="logo" />
+      seahorse<span class="version">v{{ APP_VERSION }}</span>
+    </RouterLink>
     <input
       v-if="auth.isAuthenticated"
       v-model="searchQuery"
@@ -67,10 +70,15 @@ function submitSearch() {
 .brand {
   font-weight: 700;
   font-size: 1.15rem;
+  color: var(--accent) !important;
   opacity: 1 !important;
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+.logo {
+  height: 28px;
+  width: auto;
 }
 .version {
   font-weight: 400;

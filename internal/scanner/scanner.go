@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -34,15 +35,24 @@ var (
 	coverExts = []string{"webp", "jpg", "jpeg", "png"}
 )
 
+// RemuxJob reports live progress for one in-flight transcode.RemuxAudio call.
+// Percent is best-effort (0 if the source file's duration couldn't be
+// determined) and File is just the base filename, for display purposes.
+type RemuxJob struct {
+	File    string  `json:"file"`
+	Percent float64 `json:"percent"`
+}
+
 type Status struct {
-	State         string    `json:"state"` // idle, running, done, error
-	CurrentItem   string    `json:"current_item,omitempty"`
-	MoviesFound   int       `json:"movies_found"`
-	ShowsFound    int       `json:"shows_found"`
-	EpisodesFound int       `json:"episodes_found"`
-	Error         string    `json:"error,omitempty"`
-	StartedAt     time.Time `json:"started_at,omitempty"`
-	FinishedAt    time.Time `json:"finished_at,omitempty"`
+	State         string     `json:"state"` // idle, running, done, error
+	CurrentItem   string     `json:"current_item,omitempty"`
+	MoviesFound   int        `json:"movies_found"`
+	ShowsFound    int        `json:"shows_found"`
+	EpisodesFound int        `json:"episodes_found"`
+	RemuxJobs     []RemuxJob `json:"remux_jobs,omitempty"`
+	Error         string     `json:"error,omitempty"`
+	StartedAt     time.Time  `json:"started_at,omitempty"`
+	FinishedAt    time.Time  `json:"finished_at,omitempty"`
 }
 
 type Scanner struct {
@@ -51,10 +61,76 @@ type Scanner struct {
 	mu          sync.Mutex
 	status      Status
 	subscribers []chan Status
+
+	// remuxSlots bounds how many transcode.RemuxAudio jobs run at once: the
+	// slow step (full read+write of a large video file) doesn't need the
+	// TMDB lookups/DB writes around it to wait, so it's dispatched to the
+	// background and only throttled by this semaphore. remuxWG lets a scan
+	// wait for all its outstanding remux jobs to finish before reporting done.
+	remuxSlots chan struct{}
+	remuxWG    sync.WaitGroup
 }
 
-func New(tmdbClient *tmdb.Client) *Scanner {
-	return &Scanner{tmdb: tmdbClient, status: Status{State: "idle"}}
+// New creates a Scanner. remuxConcurrency bounds how many audio remux jobs
+// (see transcode.RemuxAudio) run at once; callers should pass at least 1.
+func New(tmdbClient *tmdb.Client, remuxConcurrency int) *Scanner {
+	if remuxConcurrency < 1 {
+		remuxConcurrency = 1
+	}
+	return &Scanner{
+		tmdb:       tmdbClient,
+		status:     Status{State: "idle"},
+		remuxSlots: make(chan struct{}, remuxConcurrency),
+	}
+}
+
+// setRemuxProgress upserts the live progress entry for file (by base name).
+func (s *Scanner) setRemuxProgress(file string, percent float64) {
+	s.setStatus(func(st *Status) {
+		for i := range st.RemuxJobs {
+			if st.RemuxJobs[i].File == file {
+				st.RemuxJobs[i].Percent = percent
+				return
+			}
+		}
+		st.RemuxJobs = append(st.RemuxJobs, RemuxJob{File: file, Percent: percent})
+	})
+}
+
+// clearRemuxJob removes file's progress entry once its remux is done
+// (successfully or not) so the status doesn't keep reporting a finished job.
+func (s *Scanner) clearRemuxJob(file string) {
+	s.setStatus(func(st *Status) {
+		for i, j := range st.RemuxJobs {
+			if j.File == file {
+				st.RemuxJobs = append(st.RemuxJobs[:i], st.RemuxJobs[i+1:]...)
+				return
+			}
+		}
+	})
+}
+
+// queueRemux runs an audio remux of path in the background, bounded by
+// remuxSlots. Errors are logged, not returned, matching the previous inline
+// behavior where a failed remux never aborted the scan.
+func (s *Scanner) queueRemux(path string) {
+	s.remuxWG.Add(1)
+	go func() {
+		defer s.remuxWG.Done()
+		s.remuxSlots <- struct{}{}
+		defer func() { <-s.remuxSlots }()
+
+		base := filepath.Base(path)
+		s.setStatus(func(st *Status) { st.CurrentItem = "remuxing audio: " + base })
+		s.setRemuxProgress(base, 0)
+		defer s.clearRemuxJob(base)
+
+		if err := transcode.RemuxAudio(path, func(percent float64) {
+			s.setRemuxProgress(base, percent)
+		}); err != nil {
+			slog.Warn("could not remux incompatible audio", "file", path, "error", err)
+		}
+	}()
 }
 
 func (s *Scanner) Status() Status {
@@ -154,6 +230,9 @@ func (s *Scanner) run(libraryPath string, full bool) {
 	}
 
 	err := s.scan(libraryPath)
+
+	s.setStatus(func(st *Status) { st.CurrentItem = "finishing audio remux jobs" })
+	s.remuxWG.Wait()
 
 	s.setStatus(func(st *Status) {
 		st.CurrentItem = ""
@@ -367,10 +446,7 @@ func (s *Scanner) scanMovie(moviesRoot, folderName string) (bool, error) {
 	if needsFix, err := transcode.NeedsAudioRemux(videoFile); err != nil {
 		slog.Warn("could not probe audio codec", "file", videoFile, "error", err)
 	} else if needsFix {
-		s.setStatus(func(st *Status) { st.CurrentItem = "remuxing audio: " + filepath.Base(videoFile) })
-		if err := transcode.RemuxAudio(videoFile); err != nil {
-			slog.Warn("could not remux incompatible audio", "file", videoFile, "error", err)
-		}
+		s.queueRemux(videoFile)
 	}
 
 	movie := models.Movie{
@@ -385,6 +461,16 @@ func (s *Scanner) scanMovie(moviesRoot, folderName string) (bool, error) {
 		VoteAverage:  meta.VoteAverage,
 		Genres:       tmdb.JoinGenres(meta.Genres),
 		CoverCached:  downloadCover(filepath.Dir(videoFile), meta.PosterPath),
+	}
+
+	if details, err := s.tmdb.GetMovieDetails(meta.TMDBID); err != nil {
+		slog.Warn("could not fetch tmdb movie details (runtime/cast)", "title", meta.Title, "error", err)
+	} else {
+		movie.Runtime = details.Runtime
+		movie.Director = details.Director
+		if encoded, err := json.Marshal(details.Cast); err == nil {
+			movie.Cast = string(encoded)
+		}
 	}
 
 	return true, db.DB.Create(&movie).Error
@@ -429,6 +515,16 @@ func (s *Scanner) scanTVShow(tvRoot, folderName string) (bool, int, error) {
 			Genres:       tmdb.JoinGenres(meta.Genres),
 			CoverCached:  downloadCover(showFolder, meta.PosterPath),
 		}
+
+		if details, err := s.tmdb.GetTVDetails(meta.TMDBID); err != nil {
+			slog.Warn("could not fetch tmdb tv details (cast)", "title", meta.Title, "error", err)
+		} else {
+			show.Creators = strings.Join(details.Creators, ", ")
+			if encoded, err := json.Marshal(details.Cast); err == nil {
+				show.Cast = string(encoded)
+			}
+		}
+
 		if err := db.DB.Create(&show).Error; err != nil {
 			return false, 0, err
 		}
@@ -534,10 +630,7 @@ func (s *Scanner) scanSeason(show models.TVShow, seasonPath string, seasonNumber
 		if needsFix, err := transcode.NeedsAudioRemux(p.filePath); err != nil {
 			slog.Warn("could not probe audio codec", "file", p.filePath, "error", err)
 		} else if needsFix {
-			s.setStatus(func(st *Status) { st.CurrentItem = "remuxing audio: " + filepath.Base(p.filePath) })
-			if err := transcode.RemuxAudio(p.filePath); err != nil {
-				slog.Warn("could not remux incompatible audio", "file", p.filePath, "error", err)
-			}
+			s.queueRemux(p.filePath)
 		}
 
 		if err := db.DB.Create(&episode).Error; err != nil {

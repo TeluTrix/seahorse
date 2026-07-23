@@ -3,17 +3,19 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	ListenOn    string
-	Port        string
-	DBPath      string
-	LibraryPath string
-	TMDBAPIKey  string
-	JWTSecret   string
+	ListenOn         string
+	Port             string
+	DBPath           string
+	LibraryPath      string
+	TMDBAPIKey       string
+	JWTSecret        string
+	RemuxConcurrency int
 }
 
 func Load() Config {
@@ -44,6 +46,15 @@ func Load() Config {
 	}
 	if cfg.LibraryPath == "" {
 		log.Fatal("SEAHORSE_LIBRARY_PATH must be set")
+	}
+
+	cfg.RemuxConcurrency = 1
+	if raw := os.Getenv("SEAHORSE_REMUX_CONCURRENCY"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			cfg.RemuxConcurrency = n
+		} else {
+			log.Printf("warning: invalid SEAHORSE_REMUX_CONCURRENCY %q, defaulting to 1", raw)
+		}
 	}
 
 	return cfg

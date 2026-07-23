@@ -2,8 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, coverURL } from '../api/client'
+import Breadcrumbs from '../components/Breadcrumbs.vue'
+import CastList from '../components/CastList.vue'
 import type { Movie } from '../types'
-import { formatTime } from '../utils/format'
+import { formatRuntime, formatTime } from '../utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,26 +31,35 @@ function play(restart: boolean) {
 </script>
 
 <template>
-  <div
-    v-if="movie"
-    class="detail"
-    :style="movie.backdrop_url ? { backgroundImage: `url(${movie.backdrop_url})` } : undefined"
-  >
-    <div class="overlay">
-      <img v-if="posterUrl" :src="posterUrl" :alt="movie.title" class="poster" />
-      <div>
-        <h1>{{ movie.title }}</h1>
-        <p class="meta">{{ movie.release_date }} · ⭐ {{ movie.vote_average.toFixed(1) }} · {{ movie.genres }}</p>
-        <p class="overview">{{ movie.overview }}</p>
-        <div class="actions">
-          <template v-if="hasResumePoint">
-            <button @click="play(false)">▶ Resume from {{ formatTime(movie.progress!.position_seconds) }}</button>
-            <button class="secondary" @click="play(true)">Start Over</button>
-          </template>
-          <button v-else @click="play(false)">▶ Play</button>
+  <div v-if="movie">
+    <Breadcrumbs :trail="[{ label: 'Movies', to: '/movies' }]" :current="movie.title" fallback="/movies" />
+    <div
+      class="detail"
+      :style="movie.backdrop_url ? { backgroundImage: `url(${movie.backdrop_url})` } : undefined"
+    >
+      <div class="overlay">
+        <img v-if="posterUrl" :src="posterUrl" :alt="movie.title" class="poster" />
+        <div>
+          <h1>{{ movie.title }}</h1>
+          <p class="meta">
+            {{ movie.release_date }}
+            <template v-if="movie.runtime_minutes"> · {{ formatRuntime(movie.runtime_minutes) }}</template>
+            · ⭐ {{ movie.vote_average.toFixed(1) }} · {{ movie.genres }}
+          </p>
+          <p v-if="movie.director" class="director">Directed by {{ movie.director }}</p>
+          <p class="overview">{{ movie.overview }}</p>
+          <div class="actions">
+            <template v-if="hasResumePoint">
+              <button @click="play(false)">▶ Resume from {{ formatTime(movie.progress!.position_seconds) }}</button>
+              <button class="secondary" @click="play(true)">Start Over</button>
+            </template>
+            <button v-else @click="play(false)">▶ Play</button>
+          </div>
         </div>
       </div>
     </div>
+
+    <CastList :cast="movie.cast" />
   </div>
 </template>
 
@@ -73,7 +84,12 @@ function play(restart: boolean) {
 }
 .meta {
   opacity: 0.8;
+  margin-bottom: 0.5rem;
+}
+.director {
+  opacity: 0.8;
   margin-bottom: 1rem;
+  font-size: 0.9rem;
 }
 .overview {
   margin-bottom: 1.5rem;

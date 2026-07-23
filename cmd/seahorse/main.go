@@ -26,7 +26,7 @@ func main() {
 
 	authenticator := auth.New(cfg.JWTSecret)
 	tmdbClient := tmdb.New(cfg.TMDBAPIKey)
-	libraryScanner := scanner.New(tmdbClient)
+	libraryScanner := scanner.New(tmdbClient, cfg.RemuxConcurrency)
 	handlers := api.NewHandlers(authenticator, libraryScanner, cfg.LibraryPath)
 
 	r := mux.NewRouter()

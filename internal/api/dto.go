@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/TeluTrix/seahorse/internal/models"
 	"github.com/TeluTrix/seahorse/internal/tmdb"
@@ -23,9 +25,10 @@ func toPublicUser(u models.User) PublicUser {
 }
 
 type ProgressDTO struct {
-	PositionSeconds float64 `json:"position_seconds"`
-	DurationSeconds float64 `json:"duration_seconds"`
-	Completed       bool    `json:"completed"`
+	PositionSeconds float64   `json:"position_seconds"`
+	DurationSeconds float64   `json:"duration_seconds"`
+	Completed       bool      `json:"completed"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 func toProgressDTO(wp *models.WatchProgress) *ProgressDTO {
@@ -36,6 +39,7 @@ func toProgressDTO(wp *models.WatchProgress) *ProgressDTO {
 		PositionSeconds: wp.PositionSeconds,
 		DurationSeconds: wp.DurationSeconds,
 		Completed:       wp.Completed,
+		UpdatedAt:       wp.UpdatedAt,
 	}
 }
 
@@ -53,21 +57,55 @@ func tvShowPosterURL(t models.TVShow) string {
 	return tmdb.ImageURL(t.PosterPath, "w500")
 }
 
-type MovieDTO struct {
-	ID            uuid.UUID    `json:"id"`
-	Title         string       `json:"title"`
-	Overview      string       `json:"overview"`
-	PosterURL     string       `json:"poster_url"`
-	BackdropURL   string       `json:"backdrop_url"`
-	HasLocalCover bool         `json:"has_local_cover"`
-	ReleaseDate   string       `json:"release_date"`
-	VoteAverage   float64      `json:"vote_average"`
-	Genres        string       `json:"genres"`
-	Progress      *ProgressDTO `json:"progress,omitempty"`
+type CastMemberDTO struct {
+	Name       string `json:"name"`
+	Character  string `json:"character"`
+	ProfileURL string `json:"profile_url,omitempty"`
 }
 
-func toMovieDTO(m models.Movie, wp *models.WatchProgress) MovieDTO {
-	return MovieDTO{
+// decodeCast parses a JSON-encoded []tmdb.CastMember column into DTOs with
+// resolved image URLs. Malformed/empty input just yields no cast members
+// rather than an error — cast is supplementary metadata, never essential.
+func decodeCast(raw string) []CastMemberDTO {
+	if raw == "" {
+		return nil
+	}
+	var members []tmdb.CastMember
+	if err := json.Unmarshal([]byte(raw), &members); err != nil {
+		return nil
+	}
+	dtos := make([]CastMemberDTO, 0, len(members))
+	for _, m := range members {
+		dtos = append(dtos, CastMemberDTO{
+			Name:       m.Name,
+			Character:  m.Character,
+			ProfileURL: tmdb.ImageURL(m.ProfilePath, "w185"),
+		})
+	}
+	return dtos
+}
+
+type MovieDTO struct {
+	ID            uuid.UUID       `json:"id"`
+	Title         string          `json:"title"`
+	Overview      string          `json:"overview"`
+	PosterURL     string          `json:"poster_url"`
+	BackdropURL   string          `json:"backdrop_url"`
+	HasLocalCover bool            `json:"has_local_cover"`
+	ReleaseDate   string          `json:"release_date"`
+	VoteAverage   float64         `json:"vote_average"`
+	Genres        string          `json:"genres"`
+	Runtime       int             `json:"runtime_minutes,omitempty"`
+	Director      string          `json:"director,omitempty"`
+	Cast          []CastMemberDTO `json:"cast,omitempty"`
+	Progress      *ProgressDTO    `json:"progress,omitempty"`
+}
+
+// toMovieDTO builds the movie DTO. includeCast is false for list/search
+// results (cast isn't rendered on poster cards, so there's no reason to
+// bloat those payloads with it) and true for the single-movie detail view.
+func toMovieDTO(m models.Movie, wp *models.WatchProgress, includeCast bool) MovieDTO {
+	dto := MovieDTO{
 		ID:            m.ID,
 		Title:         m.Title,
 		Overview:      m.Overview,
@@ -77,8 +115,14 @@ func toMovieDTO(m models.Movie, wp *models.WatchProgress) MovieDTO {
 		ReleaseDate:   m.ReleaseDate,
 		VoteAverage:   m.VoteAverage,
 		Genres:        m.Genres,
+		Runtime:       m.Runtime,
+		Director:      m.Director,
 		Progress:      toProgressDTO(wp),
 	}
+	if includeCast {
+		dto.Cast = decodeCast(m.Cast)
+	}
+	return dto
 }
 
 type EpisodeDTO struct {
@@ -120,24 +164,28 @@ func toSeasonDTO(s models.Season, progressByEpisode map[uuid.UUID]models.WatchPr
 }
 
 type TVShowDTO struct {
-	ID            uuid.UUID   `json:"id"`
-	Title         string      `json:"title"`
-	Overview      string      `json:"overview"`
-	PosterURL     string      `json:"poster_url"`
-	BackdropURL   string      `json:"backdrop_url"`
-	HasLocalCover bool        `json:"has_local_cover"`
-	FirstAirDate  string      `json:"first_air_date"`
-	VoteAverage   float64     `json:"vote_average"`
-	Genres        string      `json:"genres"`
-	Seasons       []SeasonDTO `json:"seasons,omitempty"`
+	ID            uuid.UUID       `json:"id"`
+	Title         string          `json:"title"`
+	Overview      string          `json:"overview"`
+	PosterURL     string          `json:"poster_url"`
+	BackdropURL   string          `json:"backdrop_url"`
+	HasLocalCover bool            `json:"has_local_cover"`
+	FirstAirDate  string          `json:"first_air_date"`
+	VoteAverage   float64         `json:"vote_average"`
+	Genres        string          `json:"genres"`
+	Creators      string          `json:"creators,omitempty"`
+	Cast          []CastMemberDTO `json:"cast,omitempty"`
+	Seasons       []SeasonDTO     `json:"seasons,omitempty"`
 }
 
-func toTVShowDTO(t models.TVShow, progressByEpisode map[uuid.UUID]models.WatchProgress) TVShowDTO {
+// toTVShowDTO builds the show DTO. See toMovieDTO for why includeCast is
+// only set for the single-show detail view.
+func toTVShowDTO(t models.TVShow, progressByEpisode map[uuid.UUID]models.WatchProgress, includeCast bool) TVShowDTO {
 	seasons := make([]SeasonDTO, 0, len(t.Seasons))
 	for _, s := range t.Seasons {
 		seasons = append(seasons, toSeasonDTO(s, progressByEpisode))
 	}
-	return TVShowDTO{
+	dto := TVShowDTO{
 		ID:            t.ID,
 		Title:         t.Title,
 		Overview:      t.Overview,
@@ -147,8 +195,13 @@ func toTVShowDTO(t models.TVShow, progressByEpisode map[uuid.UUID]models.WatchPr
 		FirstAirDate:  t.FirstAirDate,
 		VoteAverage:   t.VoteAverage,
 		Genres:        t.Genres,
+		Creators:      t.Creators,
 		Seasons:       seasons,
 	}
+	if includeCast {
+		dto.Cast = decodeCast(t.Cast)
+	}
+	return dto
 }
 
 type MoviesPageDTO struct {

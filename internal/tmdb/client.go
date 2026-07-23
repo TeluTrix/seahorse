@@ -13,6 +13,11 @@ import (
 
 const baseURL = "https://api.themoviedb.org/3"
 
+// topCastLimit caps how many cast members are kept per movie/show, matching
+// the "top billed" cast section on an IMDb-style page rather than a full
+// credits dump.
+const topCastLimit = 15
+
 type Client struct {
 	apiKey      string
 	httpClient  *http.Client
@@ -235,6 +240,121 @@ func (c *Client) GetTVSeasonEpisodes(tvID, seasonNumber int) ([]EpisodeResult, e
 		})
 	}
 	return episodes, nil
+}
+
+type CastMember struct {
+	Name        string `json:"name"`
+	Character   string `json:"character"`
+	ProfilePath string `json:"profile_path"`
+}
+
+type MovieDetails struct {
+	Runtime  int
+	Director string
+	Cast     []CastMember
+}
+
+// GetMovieDetails fetches runtime, director, and top-billed cast for a movie
+// in a single request via TMDB's append_to_response mechanism.
+func (c *Client) GetMovieDetails(id int) (*MovieDetails, error) {
+	var data struct {
+		Runtime int `json:"runtime"`
+		Credits struct {
+			Cast []struct {
+				Name        string `json:"name"`
+				Character   string `json:"character"`
+				ProfilePath string `json:"profile_path"`
+				Order       int    `json:"order"`
+			} `json:"cast"`
+			Crew []struct {
+				Name string `json:"name"`
+				Job  string `json:"job"`
+			} `json:"crew"`
+		} `json:"credits"`
+	}
+
+	path := fmt.Sprintf("/movie/%d", id)
+	params := url.Values{"append_to_response": {"credits"}}
+	if err := c.get(path, params, &data); err != nil {
+		return nil, err
+	}
+
+	director := ""
+	for _, crewMember := range data.Credits.Crew {
+		if crewMember.Job == "Director" {
+			director = crewMember.Name
+			break
+		}
+	}
+
+	cast := make([]CastMember, 0, topCastLimit)
+	for i, castMember := range data.Credits.Cast {
+		if i >= topCastLimit {
+			break
+		}
+		cast = append(cast, CastMember{
+			Name:        castMember.Name,
+			Character:   castMember.Character,
+			ProfilePath: castMember.ProfilePath,
+		})
+	}
+
+	return &MovieDetails{Runtime: data.Runtime, Director: director, Cast: cast}, nil
+}
+
+type TVDetails struct {
+	Creators []string
+	Cast     []CastMember
+}
+
+// GetTVDetails fetches the show's creators and top-billed aggregate cast
+// (roles across all episodes/seasons, TMDB's recommended endpoint for a
+// whole-series cast list) in a single request.
+func (c *Client) GetTVDetails(id int) (*TVDetails, error) {
+	var data struct {
+		CreatedBy []struct {
+			Name string `json:"name"`
+		} `json:"created_by"`
+		AggregateCredits struct {
+			Cast []struct {
+				Name        string `json:"name"`
+				ProfilePath string `json:"profile_path"`
+				Order       int    `json:"order"`
+				Roles       []struct {
+					Character string `json:"character"`
+				} `json:"roles"`
+			} `json:"cast"`
+		} `json:"aggregate_credits"`
+	}
+
+	path := fmt.Sprintf("/tv/%d", id)
+	params := url.Values{"append_to_response": {"aggregate_credits"}}
+	if err := c.get(path, params, &data); err != nil {
+		return nil, err
+	}
+
+	creators := make([]string, 0, len(data.CreatedBy))
+	for _, creator := range data.CreatedBy {
+		creators = append(creators, creator.Name)
+	}
+
+	cast := make([]CastMember, 0, topCastLimit)
+	for i, castMember := range data.AggregateCredits.Cast {
+		if i >= topCastLimit {
+			break
+		}
+		character := ""
+		if len(castMember.Roles) > 0 {
+			character = castMember.Roles[0].Character
+		}
+		cast = append(cast, CastMember{
+			Name:        castMember.Name,
+			Character:   character,
+			ProfilePath: castMember.ProfilePath,
+		})
+	}
+
+	return &TVDetails{Creators: creators, Cast: cast}, nil
 }
 
 // FindEpisode returns the episode metadata matching episodeNumber, if present.

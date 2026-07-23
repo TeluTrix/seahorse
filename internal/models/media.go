@@ -17,6 +17,9 @@ type Movie struct {
 	ReleaseDate  string
 	VoteAverage  float64
 	Genres       string
+	Runtime      int // minutes
+	Director     string
+	Cast         string `gorm:"type:text"` // JSON-encoded []tmdb.CastMember
 	FilePath     string `gorm:"uniqueIndex"`
 	CoverCached  bool
 	CreatedAt    time.Time
@@ -34,6 +37,8 @@ type TVShow struct {
 	FirstAirDate string
 	VoteAverage  float64
 	Genres       string
+	Creators     string // comma-joined, same pattern as Genres
+	Cast         string `gorm:"type:text"` // JSON-encoded []tmdb.CastMember
 	FolderPath   string `gorm:"uniqueIndex"`
 	CoverCached  bool
 	Seasons      []Season `gorm:"foreignKey:TVShowID"`

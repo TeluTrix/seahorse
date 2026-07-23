@@ -15,6 +15,13 @@ export interface Progress {
   position_seconds: number
   duration_seconds: number
   completed: boolean
+  updated_at: string
+}
+
+export interface CastMember {
+  name: string
+  character: string
+  profile_url?: string
 }
 
 export interface Movie {
@@ -27,6 +34,9 @@ export interface Movie {
   release_date: string
   vote_average: number
   genres: string
+  runtime_minutes?: number
+  director?: string
+  cast?: CastMember[]
   progress?: Progress
 }
 
@@ -55,10 +65,17 @@ export interface TVShow {
   first_air_date: string
   vote_average: number
   genres: string
+  creators?: string
+  cast?: CastMember[]
   seasons?: Season[]
 }
 
 export type ScanState = 'idle' | 'running' | 'done' | 'error'
+
+export interface RemuxJob {
+  file: string
+  percent: number
+}
 
 export interface ScanStatus {
   state: ScanState
@@ -66,6 +83,7 @@ export interface ScanStatus {
   movies_found: number
   shows_found: number
   episodes_found: number
+  remux_jobs?: RemuxJob[]
   error?: string
   started_at?: string
   finished_at?: string

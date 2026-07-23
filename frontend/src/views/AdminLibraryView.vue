@@ -57,6 +57,13 @@ onBeforeUnmount(() => eventSource?.close())
         Found {{ status.movies_found }} movies, {{ status.shows_found }} shows,
         {{ status.episodes_found }} episodes{{ status.state === 'running' ? ' so far…' : '.' }}
       </p>
+      <div v-for="job in status.remux_jobs" :key="job.file" class="remux-job">
+        <div class="remux-file">Remuxing audio: {{ job.file }}</div>
+        <div class="remux-track">
+          <div class="remux-fill" :style="{ width: job.percent + '%' }" />
+        </div>
+        <div class="remux-percent">{{ Math.round(job.percent) }}%</div>
+      </div>
       <p v-if="status.state === 'error'" class="error-message">{{ status.error }}</p>
     </div>
   </div>
@@ -77,5 +84,34 @@ onBeforeUnmount(() => eventSource?.close())
 .hint {
   color: var(--text-dim);
   font-size: 0.9rem;
+}
+.remux-job {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+.remux-file {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-bottom: 0.3rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.remux-track {
+  width: 100%;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.remux-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.remux-percent {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-top: 0.2rem;
 }
 </style>

@@ -94,20 +94,26 @@ func decodeCast(raw string) []CastMemberDTO {
 }
 
 type MovieDTO struct {
-	ID            uuid.UUID       `json:"id"`
-	Title         string          `json:"title"`
-	Overview      string          `json:"overview"`
-	PosterURL     string          `json:"poster_url"`
-	BackdropURL   string          `json:"backdrop_url"`
-	HasLocalCover bool            `json:"has_local_cover"`
-	ReleaseDate   string          `json:"release_date"`
-	VoteAverage   float64         `json:"vote_average"`
-	Genres        string          `json:"genres"`
-	Runtime       int             `json:"runtime_minutes,omitempty"`
-	Director      string          `json:"director,omitempty"`
-	Cast          []CastMemberDTO `json:"cast,omitempty"`
-	Progress      *ProgressDTO    `json:"progress,omitempty"`
-	RemuxStatus   string          `json:"remux_status,omitempty"`
+	ID                  uuid.UUID       `json:"id"`
+	Title               string          `json:"title"`
+	Overview            string          `json:"overview"`
+	PosterURL           string          `json:"poster_url"`
+	BackdropURL         string          `json:"backdrop_url"`
+	HasLocalCover       bool            `json:"has_local_cover"`
+	ReleaseDate         string          `json:"release_date"`
+	VoteAverage         float64         `json:"vote_average"`
+	Genres              string          `json:"genres"`
+	Runtime             int             `json:"runtime_minutes,omitempty"`
+	Director            string          `json:"director,omitempty"`
+	Cast                []CastMemberDTO `json:"cast,omitempty"`
+	Progress            *ProgressDTO    `json:"progress,omitempty"`
+	RemuxStatus         string          `json:"remux_status,omitempty"`
+	Tagline             string          `json:"tagline,omitempty"`
+	OriginalLanguage    string          `json:"original_language,omitempty"`
+	Budget              int64           `json:"budget,omitempty"`
+	Revenue             int64           `json:"revenue,omitempty"`
+	ProductionCompanies string          `json:"production_companies,omitempty"`
+	ProductionCountries string          `json:"production_countries,omitempty"`
 }
 
 // toMovieDTO builds the movie DTO. includeCast is false for list/search
@@ -131,6 +137,12 @@ func toMovieDTO(m models.Movie, wp *models.WatchProgress, includeCast bool, remu
 	}
 	if includeCast {
 		dto.Cast = decodeCast(m.Cast)
+		dto.Tagline = m.Tagline
+		dto.OriginalLanguage = m.OriginalLanguage
+		dto.Budget = m.Budget
+		dto.Revenue = m.Revenue
+		dto.ProductionCompanies = m.ProductionCompanies
+		dto.ProductionCountries = m.ProductionCountries
 	}
 	return dto
 }

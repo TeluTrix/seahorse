@@ -50,6 +50,23 @@ export interface Movie {
   cast?: CastMember[]
   progress?: Progress
   remux_status?: 'pending' | 'active'
+  tagline?: string
+  original_language?: string
+  budget?: number
+  revenue?: number
+  production_companies?: string
+  production_countries?: string
+}
+
+export interface MediaInfo {
+  container: string
+  file_size_bytes: number
+  bitrate_kbps?: number
+  video_codec?: string
+  width?: number
+  height?: number
+  audio_codec?: string
+  audio_channels?: number
 }
 
 export interface Episode {
@@ -61,6 +78,28 @@ export interface Episode {
   runtime_minutes?: number
   progress?: Progress
   remux_status?: 'pending' | 'active'
+}
+
+// Enough about an episode's place in its show for the player's breadcrumb
+// trail — the player itself only ever receives an episode id.
+export interface EpisodeContext {
+  id: string
+  title: string
+  overview: string
+  episode_number: number
+  season_number: number
+  show_id: string
+  show_title: string
+}
+
+// The episode that plays right after a given one, for the player's "Watch
+// Next" prompt.
+export interface NextEpisode {
+  id: string
+  title: string
+  episode_number: number
+  season_number: number
+  still_url: string
 }
 
 export interface Season {
@@ -82,6 +121,25 @@ export interface TVShow {
   creators?: string
   cast?: CastMember[]
   seasons?: Season[]
+}
+
+export interface Actor {
+  name: string
+  profile_url?: string
+  credits: number
+}
+
+export interface ActorsPage {
+  actors: Actor[]
+  page: number
+  page_size: number
+  total: number
+}
+
+export interface ActorFilmography {
+  name: string
+  movies: Movie[]
+  tv_shows: TVShow[]
 }
 
 export type ScanState = 'idle' | 'running' | 'done' | 'error'

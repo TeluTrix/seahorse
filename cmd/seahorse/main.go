@@ -52,11 +52,17 @@ func main() {
 
 	apiRouter.Handle("/movies", authenticator.RequireAuth(http.HandlerFunc(handlers.ListMovies))).Methods("GET")
 	apiRouter.Handle("/movies/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.GetMovie))).Methods("GET")
+	apiRouter.Handle("/movies/{id}/mediainfo", authenticator.RequireAuth(http.HandlerFunc(handlers.MovieMediaInfo))).Methods("GET")
 	apiRouter.Handle("/tvshows", authenticator.RequireAuth(http.HandlerFunc(handlers.ListTVShows))).Methods("GET")
 	apiRouter.Handle("/tvshows/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.GetTVShow))).Methods("GET")
 
+	apiRouter.Handle("/episodes/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.GetEpisode))).Methods("GET")
+	apiRouter.Handle("/episodes/{id}/next", authenticator.RequireAuth(http.HandlerFunc(handlers.NextEpisode))).Methods("GET")
+
 	apiRouter.Handle("/search", authenticator.RequireAuth(http.HandlerFunc(handlers.Search))).Methods("GET")
 	apiRouter.Handle("/genres", authenticator.RequireAuth(http.HandlerFunc(handlers.ListGenres))).Methods("GET")
+	apiRouter.Handle("/actors", authenticator.RequireAuth(http.HandlerFunc(handlers.ListActors))).Methods("GET")
+	apiRouter.Handle("/actors/{name}", authenticator.RequireAuth(http.HandlerFunc(handlers.ActorFilmography))).Methods("GET")
 
 	apiRouter.Handle("/stream/movies/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.StreamMovie))).Methods("GET")
 	apiRouter.Handle("/stream/episodes/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.StreamEpisode))).Methods("GET")

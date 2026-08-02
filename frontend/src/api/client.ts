@@ -1,9 +1,14 @@
 import type {
+  ActorFilmography,
+  ActorsPage,
   AuthResponse,
   ClientConfig,
+  EpisodeContext,
+  MediaInfo,
   MediaType,
   Movie,
   MoviesPage,
+  NextEpisode,
   Progress,
   PublicUser,
   ScanStatus,
@@ -63,9 +68,18 @@ export const api = {
   listMovies: (page = 1, pageSize = 48, sort?: 'newest') =>
     request<MoviesPage>(`/movies?page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}`),
   getMovie: (id: string) => request<Movie>(`/movies/${id}`),
+  getMovieMediaInfo: (id: string) => request<MediaInfo>(`/movies/${id}/mediainfo`),
   listTVShows: (page = 1, pageSize = 48, sort?: 'newest') =>
     request<TVShowsPage>(`/tvshows?page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}`),
   getTVShow: (id: string) => request<TVShow>(`/tvshows/${id}`),
+  getEpisode: (id: string) => request<EpisodeContext>(`/episodes/${id}`),
+  getNextEpisode: async (id: string): Promise<NextEpisode | null> => {
+    try {
+      return await request<NextEpisode>(`/episodes/${id}/next`)
+    } catch {
+      return null
+    }
+  },
   search: (params: {
     q?: string
     year?: string
@@ -84,6 +98,14 @@ export const api = {
     return request<SearchResult>(`/search?${query.toString()}`)
   },
   listGenres: () => request<string[]>('/genres'),
+  listActors: (params: { q?: string; page?: number; pageSize?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (params.q) query.set('q', params.q)
+    query.set('page', String(params.page ?? 1))
+    query.set('page_size', String(params.pageSize ?? 48))
+    return request<ActorsPage>(`/actors?${query.toString()}`)
+  },
+  getActorFilmography: (name: string) => request<ActorFilmography>(`/actors/${encodeURIComponent(name)}`),
   getConfig: () => request<ClientConfig>('/config'),
   scanLibrary: (full = false) => request<ScanStatus>(`/admin/scan${full ? '?mode=full' : ''}`, { method: 'POST' }),
   listUsers: () => request<PublicUser[]>('/admin/users'),

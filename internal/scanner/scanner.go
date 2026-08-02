@@ -21,6 +21,7 @@ import (
 	"github.com/TeluTrix/seahorse/internal/tmdb"
 	"github.com/TeluTrix/seahorse/internal/transcode"
 	"github.com/google/uuid"
+	"golang.org/x/text/unicode/norm"
 	"gorm.io/gorm"
 )
 
@@ -290,6 +291,10 @@ func (s *Scanner) StartScan(libraryPath string, full bool) error {
 }
 
 func (s *Scanner) run(libraryPath string, full bool) {
+	if err := dedupeExistingMedia(); err != nil {
+		slog.Warn("could not clean up duplicate media rows", "error", err)
+	}
+
 	if full {
 		if err := wipeAllMedia(); err != nil {
 			s.setStatus(func(st *Status) {
@@ -355,6 +360,141 @@ func wipeAllMedia() error {
 	}
 	if err := db.DB.Unscoped().Where("1 = 1").Delete(&models.Movie{}).Error; err != nil {
 		return err
+	}
+	return nil
+}
+
+// dedupeExistingMedia removes duplicate movie/episode rows left behind by
+// the (now-fixed, see normalizedPath) bug where a differently-normalized
+// duplicate of an already-known file's path slipped past the "already
+// scanned" check and got inserted as a second row. Runs at the start of
+// every scan so any stragglers self-heal; a no-op once nothing's left to
+// merge.
+func dedupeExistingMedia() error {
+	if err := dedupeMoviesByPath(); err != nil {
+		return fmt.Errorf("movies: %w", err)
+	}
+	if err := dedupeEpisodesByPath(); err != nil {
+		return fmt.Errorf("episodes: %w", err)
+	}
+	return nil
+}
+
+type dupCandidate struct {
+	ID        uuid.UUID
+	CreatedAt time.Time
+}
+
+// resolveDuplicates picks which of a group of same-identity rows to keep.
+// If none of them has its own watch progress, the oldest row survives.  If
+// exactly one does, that one survives (never discard someone's watch
+// history to keep an arbitrary "first" row). If *more than one* has its own
+// progress, merging is ambiguous — ok is false and the group is left alone
+// entirely for manual attention rather than guessed at.
+func resolveDuplicates(mediaType models.MediaType, group []dupCandidate) (toDelete []uuid.UUID, ok bool) {
+	ids := make([]uuid.UUID, len(group))
+	for i, c := range group {
+		ids[i] = c.ID
+	}
+
+	var withProgress []uuid.UUID
+	if err := db.DB.Model(&models.WatchProgress{}).
+		Where("media_type = ? AND media_id IN ?", mediaType, ids).
+		Distinct("media_id").Pluck("media_id", &withProgress).Error; err != nil {
+		return nil, false
+	}
+	if len(withProgress) > 1 {
+		return nil, false
+	}
+
+	survivor := group[0].ID
+	if len(withProgress) == 1 {
+		survivor = withProgress[0]
+	} else {
+		earliest := group[0].CreatedAt
+		for _, c := range group[1:] {
+			if c.CreatedAt.Before(earliest) {
+				survivor, earliest = c.ID, c.CreatedAt
+			}
+		}
+	}
+
+	for _, id := range ids {
+		if id != survivor {
+			toDelete = append(toDelete, id)
+		}
+	}
+	return toDelete, true
+}
+
+func dedupeMoviesByPath() error {
+	var movies []models.Movie
+	if err := db.DB.Find(&movies).Error; err != nil {
+		return err
+	}
+
+	groups := map[string][]models.Movie{}
+	for _, m := range movies {
+		key := norm.NFC.String(m.FilePath)
+		groups[key] = append(groups[key], m)
+	}
+
+	for path, group := range groups {
+		if len(group) < 2 {
+			continue
+		}
+		candidates := make([]dupCandidate, len(group))
+		for i, m := range group {
+			candidates[i] = dupCandidate{ID: m.ID, CreatedAt: m.CreatedAt}
+		}
+		toDelete, ok := resolveDuplicates(models.MediaTypeMovie, candidates)
+		if !ok {
+			slog.Warn("multiple duplicate movie rows each have their own watch progress; leaving them for manual cleanup", "path", path)
+			continue
+		}
+		if len(toDelete) == 0 {
+			continue
+		}
+		if err := db.DB.Unscoped().Where("id IN ?", toDelete).Delete(&models.Movie{}).Error; err != nil {
+			return err
+		}
+		slog.Info("removed duplicate movie rows (stale path-normalization mismatch)", "path", path, "removed", len(toDelete))
+	}
+	return nil
+}
+
+func dedupeEpisodesByPath() error {
+	var episodes []models.Episode
+	if err := db.DB.Find(&episodes).Error; err != nil {
+		return err
+	}
+
+	groups := map[string][]models.Episode{}
+	for _, e := range episodes {
+		key := norm.NFC.String(e.FilePath)
+		groups[key] = append(groups[key], e)
+	}
+
+	for path, group := range groups {
+		if len(group) < 2 {
+			continue
+		}
+		candidates := make([]dupCandidate, len(group))
+		for i, e := range group {
+			candidates[i] = dupCandidate{ID: e.ID, CreatedAt: e.CreatedAt}
+		}
+		toDelete, ok := resolveDuplicates(models.MediaTypeEpisode, candidates)
+		if !ok {
+			slog.Warn("multiple duplicate episode rows each have their own watch progress; leaving them for manual cleanup", "path", path)
+			continue
+		}
+		if len(toDelete) == 0 {
+			continue
+		}
+		if err := db.DB.Where("id IN ?", toDelete).Delete(&models.Episode{}).Error; err != nil {
+			return err
+		}
+		slog.Info("removed duplicate episode rows (stale path-normalization mismatch)", "path", path, "removed", len(toDelete))
 	}
 	return nil
 }
@@ -475,10 +615,22 @@ func findVideoFile(dir string) (string, error) {
 			continue
 		}
 		if videoExtSet[strings.ToLower(filepath.Ext(entry.Name()))] {
-			return filepath.Join(dir, entry.Name()), nil
+			return normalizedPath(dir, entry.Name()), nil
 		}
 	}
 	return "", fmt.Errorf("no video file found in %s", dir)
+}
+
+// normalizedPath joins dir and name into a path, normalized to NFC. Some
+// filesystems/tools return accented filenames decomposed (NFD) rather than
+// precomposed (NFC) — two visually-identical filenames that are different
+// byte sequences — which previously let a rescan's "already known" lookup
+// (a plain string comparison against the stored FilePath/FolderPath) miss
+// and create a duplicate row for the same file. Every path used as that
+// lookup key or stored value goes through this so the comparison is always
+// apples-to-apples regardless of which form the filesystem handed back.
+func normalizedPath(dir, name string) string {
+	return norm.NFC.String(filepath.Join(dir, name))
 }
 
 // scanMovie returns whether a new movie was added. Movies already known by
@@ -544,6 +696,12 @@ func (s *Scanner) scanMovie(moviesRoot, folderName string) (bool, error) {
 		if encoded, err := json.Marshal(details.Cast); err == nil {
 			movie.Cast = string(encoded)
 		}
+		movie.Tagline = details.Tagline
+		movie.OriginalLanguage = details.OriginalLanguage
+		movie.Budget = details.Budget
+		movie.Revenue = details.Revenue
+		movie.ProductionCompanies = strings.Join(details.ProductionCompanies, ", ")
+		movie.ProductionCountries = strings.Join(details.ProductionCountries, ", ")
 	}
 
 	return true, db.DB.Create(&movie).Error
@@ -561,7 +719,7 @@ func (s *Scanner) scanTVShow(tvRoot, folderName string) (bool, int, error) {
 		yearNum, _ = strconv.Atoi(matches[2])
 	}
 
-	showFolder := filepath.Join(tvRoot, folderName)
+	showFolder := normalizedPath(tvRoot, folderName)
 
 	var show models.TVShow
 	result := db.DB.Where("folder_path = ?", showFolder).First(&show)
@@ -655,7 +813,7 @@ func (s *Scanner) scanSeason(show models.TVShow, seasonPath string, seasonNumber
 		if epMatch == nil {
 			continue
 		}
-		filePath := filepath.Join(seasonPath, entry.Name())
+		filePath := normalizedPath(seasonPath, entry.Name())
 
 		var count int64
 		if err := db.DB.Model(&models.Episode{}).Where("file_path = ?", filePath).Count(&count).Error; err != nil {

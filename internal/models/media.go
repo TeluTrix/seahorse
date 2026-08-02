@@ -8,23 +8,29 @@ import (
 )
 
 type Movie struct {
-	ID           uuid.UUID `gorm:"primaryKey"`
-	TMDBID       int
-	Title        string
-	Overview     string
-	PosterPath   string
-	BackdropPath string
-	ReleaseDate  string
-	VoteAverage  float64
-	Genres       string
-	Runtime      int // minutes
-	Director     string
-	Cast         string `gorm:"type:text"` // JSON-encoded []tmdb.CastMember
-	FilePath     string `gorm:"uniqueIndex"`
-	CoverCached  bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	DeletedAt    gorm.DeletedAt `gorm:"index"`
+	ID                  uuid.UUID `gorm:"primaryKey"`
+	TMDBID              int
+	Title               string
+	Overview            string
+	PosterPath          string
+	BackdropPath        string
+	ReleaseDate         string
+	VoteAverage         float64
+	Genres              string
+	Runtime             int // minutes
+	Director            string
+	Cast                string `gorm:"type:text"` // JSON-encoded []tmdb.CastMember
+	Tagline             string
+	OriginalLanguage    string // ISO 639-1 code, e.g. "en"
+	Budget              int64  // USD
+	Revenue             int64  // USD
+	ProductionCompanies string // comma-joined, same pattern as Genres
+	ProductionCountries string // comma-joined, same pattern as Genres
+	FilePath            string `gorm:"uniqueIndex"`
+	CoverCached         bool
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	DeletedAt           gorm.DeletedAt `gorm:"index"`
 }
 
 type TVShow struct {

@@ -28,6 +28,11 @@ function submitSearch() {
       <img src="/logo.svg" alt="" class="logo" />
       seahorse<span class="version">v{{ APP_VERSION }}</span>
     </RouterLink>
+    <template v-if="auth.isAuthenticated">
+      <RouterLink to="/movies">Movies</RouterLink>
+      <RouterLink to="/tvshows">TV Shows</RouterLink>
+      <RouterLink to="/actors">Actors</RouterLink>
+    </template>
     <input
       v-if="auth.isAuthenticated"
       v-model="searchQuery"

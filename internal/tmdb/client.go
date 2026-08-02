@@ -252,16 +252,33 @@ type CastMember struct {
 }
 
 type MovieDetails struct {
-	Runtime  int
-	Director string
-	Cast     []CastMember
+	Runtime             int
+	Director            string
+	Cast                []CastMember
+	Tagline             string
+	OriginalLanguage    string
+	Budget              int64
+	Revenue             int64
+	ProductionCompanies []string
+	ProductionCountries []string
 }
 
-// GetMovieDetails fetches runtime, director, and top-billed cast for a movie
-// in a single request via TMDB's append_to_response mechanism.
+// GetMovieDetails fetches runtime, director, top-billed cast, and assorted
+// extra metadata (tagline, budget/revenue, production info) for a movie in
+// a single request via TMDB's append_to_response mechanism.
 func (c *Client) GetMovieDetails(id int) (*MovieDetails, error) {
 	var data struct {
-		Runtime int `json:"runtime"`
+		Runtime             int    `json:"runtime"`
+		Tagline             string `json:"tagline"`
+		OriginalLanguage    string `json:"original_language"`
+		Budget              int64  `json:"budget"`
+		Revenue             int64  `json:"revenue"`
+		ProductionCompanies []struct {
+			Name string `json:"name"`
+		} `json:"production_companies"`
+		ProductionCountries []struct {
+			Name string `json:"name"`
+		} `json:"production_countries"`
 		Credits struct {
 			Cast []struct {
 				Name        string `json:"name"`
@@ -302,7 +319,26 @@ func (c *Client) GetMovieDetails(id int) (*MovieDetails, error) {
 		})
 	}
 
-	return &MovieDetails{Runtime: data.Runtime, Director: director, Cast: cast}, nil
+	companies := make([]string, 0, len(data.ProductionCompanies))
+	for _, company := range data.ProductionCompanies {
+		companies = append(companies, company.Name)
+	}
+	countries := make([]string, 0, len(data.ProductionCountries))
+	for _, country := range data.ProductionCountries {
+		countries = append(countries, country.Name)
+	}
+
+	return &MovieDetails{
+		Runtime:             data.Runtime,
+		Director:            director,
+		Cast:                cast,
+		Tagline:             data.Tagline,
+		OriginalLanguage:    data.OriginalLanguage,
+		Budget:              data.Budget,
+		Revenue:             data.Revenue,
+		ProductionCompanies: companies,
+		ProductionCountries: countries,
+	}, nil
 }
 
 type TVDetails struct {

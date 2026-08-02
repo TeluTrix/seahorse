@@ -20,12 +20,12 @@ func Count() (int64, error) {
 	return count, err
 }
 
+// CreateUser creates an account via public self-registration, always
+// auto-assigning the role ("first ever user becomes admin, everyone else is
+// a plain user") rather than trusting any caller-supplied role. Admin-driven
+// creation, where the role is an explicit, validated choice, goes through
+// CreateUserWithRole instead.
 func CreateUser(email, password string) (models.User, error) {
-	hashed, err := auth.HashPassword(password)
-	if err != nil {
-		return models.User{}, err
-	}
-
 	count, err := Count()
 	if err != nil {
 		return models.User{}, err
@@ -34,6 +34,22 @@ func CreateUser(email, password string) (models.User, error) {
 	role := models.RoleUser
 	if count == 0 {
 		role = models.RoleAdmin
+	}
+
+	return createUser(email, password, role)
+}
+
+// CreateUserWithRole creates an account with an explicitly chosen role, for
+// admin-driven user creation. See CreateUser for the public-registration
+// path, which never trusts a caller-supplied role.
+func CreateUserWithRole(email, password string, role models.Role) (models.User, error) {
+	return createUser(email, password, role)
+}
+
+func createUser(email, password string, role models.Role) (models.User, error) {
+	hashed, err := auth.HashPassword(password)
+	if err != nil {
+		return models.User{}, err
 	}
 
 	newUser := models.User{

@@ -11,6 +11,7 @@ import type {
   NextEpisode,
   Progress,
   PublicUser,
+  Role,
   ScanStatus,
   SearchResult,
   SubtitleTrack,
@@ -69,9 +70,11 @@ export const api = {
     request<MoviesPage>(`/movies?page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}`),
   getMovie: (id: string) => request<Movie>(`/movies/${id}`),
   getMovieMediaInfo: (id: string) => request<MediaInfo>(`/movies/${id}/mediainfo`),
+  refreshMovie: (id: string) => request<Movie>(`/admin/movies/${id}/refresh`, { method: 'POST' }),
   listTVShows: (page = 1, pageSize = 48, sort?: 'newest') =>
     request<TVShowsPage>(`/tvshows?page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}`),
   getTVShow: (id: string) => request<TVShow>(`/tvshows/${id}`),
+  refreshTVShow: (id: string) => request<TVShow>(`/admin/tvshows/${id}/refresh`, { method: 'POST' }),
   getEpisode: (id: string) => request<EpisodeContext>(`/episodes/${id}`),
   getNextEpisode: async (id: string): Promise<NextEpisode | null> => {
     try {
@@ -109,10 +112,10 @@ export const api = {
   getConfig: () => request<ClientConfig>('/config'),
   scanLibrary: (full = false) => request<ScanStatus>(`/admin/scan${full ? '?mode=full' : ''}`, { method: 'POST' }),
   listUsers: () => request<PublicUser[]>('/admin/users'),
-  createUser: (email: string, password: string) =>
+  createUser: (email: string, password: string, role: Role) =>
     request<PublicUser>('/admin/users', {
       method: 'POST',
-      body: JSON.stringify({ user_email: email, user_password: password }),
+      body: JSON.stringify({ user_email: email, user_password: password, user_role: role }),
     }),
   setUserPassword: (userId: string, newPassword: string) =>
     request<{ ok: boolean }>(`/admin/users/${userId}/password`, {

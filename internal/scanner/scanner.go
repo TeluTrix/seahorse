@@ -171,6 +171,13 @@ func (s *Scanner) RemuxState(mediaID uuid.UUID) string {
 	return s.mediaRemuxState[mediaID]
 }
 
+// TMDBClient exposes the scanner's already-configured TMDB client for
+// one-off lookups outside a full scan, e.g. an admin-triggered metadata
+// refresh for a single movie/show.
+func (s *Scanner) TMDBClient() *tmdb.Client {
+	return s.tmdb
+}
+
 // processBacklog runs every remux job queued via queueRemux since the last
 // call, bounded by remuxSlots, and blocks until they've all finished.
 // Errors are logged, not returned, matching the previous inline behavior
@@ -323,7 +330,7 @@ func (s *Scanner) run(libraryPath string, full bool) {
 	})
 }
 
-func removeCoverFiles(dir string) {
+func RemoveCoverFiles(dir string) {
 	for _, ext := range coverExts {
 		_ = os.Remove(filepath.Join(dir, "cover."+ext))
 	}
@@ -338,7 +345,7 @@ func wipeAllMedia() error {
 		return err
 	}
 	for _, m := range movies {
-		removeCoverFiles(filepath.Dir(m.FilePath))
+		RemoveCoverFiles(filepath.Dir(m.FilePath))
 	}
 
 	var shows []models.TVShow
@@ -346,7 +353,7 @@ func wipeAllMedia() error {
 		return err
 	}
 	for _, sh := range shows {
-		removeCoverFiles(sh.FolderPath)
+		RemoveCoverFiles(sh.FolderPath)
 	}
 
 	if err := db.DB.Where("1 = 1").Delete(&models.Episode{}).Error; err != nil {
@@ -499,7 +506,7 @@ func dedupeEpisodesByPath() error {
 	return nil
 }
 
-// downloadCover ensures dir contains a local cover.{webp,jpg,jpeg,png}. If
+// DownloadCover ensures dir contains a local cover.{webp,jpg,jpeg,png}. If
 // one already exists it's left as-is (no network call). Returns whether a
 // local cover ended up present.
 //
@@ -509,7 +516,7 @@ func dedupeEpisodesByPath() error {
 // ffmpeg is available, the downloaded JPEG is further converted to WebP
 // (~25-35% smaller again) and the intermediate JPEG removed; otherwise the
 // JPEG is kept as-is.
-func downloadCover(dir, posterPath string) bool {
+func DownloadCover(dir, posterPath string) bool {
 	for _, ext := range coverExts {
 		if _, err := os.Stat(filepath.Join(dir, "cover."+ext)); err == nil {
 			return true
@@ -685,7 +692,7 @@ func (s *Scanner) scanMovie(moviesRoot, folderName string) (bool, error) {
 		ReleaseDate:  meta.ReleaseDate,
 		VoteAverage:  meta.VoteAverage,
 		Genres:       tmdb.JoinGenres(meta.Genres),
-		CoverCached:  downloadCover(filepath.Dir(videoFile), meta.PosterPath),
+		CoverCached:  DownloadCover(filepath.Dir(videoFile), meta.PosterPath),
 	}
 
 	if details, err := s.tmdb.GetMovieDetails(meta.TMDBID); err != nil {
@@ -744,7 +751,7 @@ func (s *Scanner) scanTVShow(tvRoot, folderName string) (bool, int, error) {
 			FirstAirDate: meta.FirstAirDate,
 			VoteAverage:  meta.VoteAverage,
 			Genres:       tmdb.JoinGenres(meta.Genres),
-			CoverCached:  downloadCover(showFolder, meta.PosterPath),
+			CoverCached:  DownloadCover(showFolder, meta.PosterPath),
 		}
 
 		if details, err := s.tmdb.GetTVDetails(meta.TMDBID); err != nil {

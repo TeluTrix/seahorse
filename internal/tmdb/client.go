@@ -252,6 +252,18 @@ type CastMember struct {
 }
 
 type MovieDetails struct {
+	// Base fields — also available from SearchMovie, but re-fetched here by
+	// TMDB ID (rather than a fresh title search) for RefreshMovie, so a
+	// metadata refresh can't drift to a different match than the one already
+	// on file.
+	Title        string
+	Overview     string
+	PosterPath   string
+	BackdropPath string
+	ReleaseDate  string
+	VoteAverage  float64
+	Genres       []string
+
 	Runtime             int
 	Director            string
 	Cast                []CastMember
@@ -268,6 +280,16 @@ type MovieDetails struct {
 // a single request via TMDB's append_to_response mechanism.
 func (c *Client) GetMovieDetails(id int) (*MovieDetails, error) {
 	var data struct {
+		Title        string  `json:"title"`
+		Overview     string  `json:"overview"`
+		PosterPath   string  `json:"poster_path"`
+		BackdropPath string  `json:"backdrop_path"`
+		ReleaseDate  string  `json:"release_date"`
+		VoteAverage  float64 `json:"vote_average"`
+		Genres       []struct {
+			Name string `json:"name"`
+		} `json:"genres"`
+
 		Runtime             int    `json:"runtime"`
 		Tagline             string `json:"tagline"`
 		OriginalLanguage    string `json:"original_language"`
@@ -327,8 +349,20 @@ func (c *Client) GetMovieDetails(id int) (*MovieDetails, error) {
 	for _, country := range data.ProductionCountries {
 		countries = append(countries, country.Name)
 	}
+	genres := make([]string, 0, len(data.Genres))
+	for _, g := range data.Genres {
+		genres = append(genres, g.Name)
+	}
 
 	return &MovieDetails{
+		Title:        data.Title,
+		Overview:     data.Overview,
+		PosterPath:   data.PosterPath,
+		BackdropPath: data.BackdropPath,
+		ReleaseDate:  data.ReleaseDate,
+		VoteAverage:  data.VoteAverage,
+		Genres:       genres,
+
 		Runtime:             data.Runtime,
 		Director:            director,
 		Cast:                cast,
@@ -342,6 +376,18 @@ func (c *Client) GetMovieDetails(id int) (*MovieDetails, error) {
 }
 
 type TVDetails struct {
+	// Base fields — also available from SearchTV, but re-fetched here by
+	// TMDB ID (rather than a fresh title search) for RefreshTVShow, so a
+	// metadata refresh can't drift to a different match than the one already
+	// on file.
+	Title        string
+	Overview     string
+	PosterPath   string
+	BackdropPath string
+	FirstAirDate string
+	VoteAverage  float64
+	Genres       []string
+
 	Creators []string
 	Cast     []CastMember
 }
@@ -351,6 +397,16 @@ type TVDetails struct {
 // whole-series cast list) in a single request.
 func (c *Client) GetTVDetails(id int) (*TVDetails, error) {
 	var data struct {
+		Name         string  `json:"name"`
+		Overview     string  `json:"overview"`
+		PosterPath   string  `json:"poster_path"`
+		BackdropPath string  `json:"backdrop_path"`
+		FirstAirDate string  `json:"first_air_date"`
+		VoteAverage  float64 `json:"vote_average"`
+		Genres       []struct {
+			Name string `json:"name"`
+		} `json:"genres"`
+
 		CreatedBy []struct {
 			Name string `json:"name"`
 		} `json:"created_by"`
@@ -393,7 +449,23 @@ func (c *Client) GetTVDetails(id int) (*TVDetails, error) {
 		})
 	}
 
-	return &TVDetails{Creators: creators, Cast: cast}, nil
+	genres := make([]string, 0, len(data.Genres))
+	for _, g := range data.Genres {
+		genres = append(genres, g.Name)
+	}
+
+	return &TVDetails{
+		Title:        data.Name,
+		Overview:     data.Overview,
+		PosterPath:   data.PosterPath,
+		BackdropPath: data.BackdropPath,
+		FirstAirDate: data.FirstAirDate,
+		VoteAverage:  data.VoteAverage,
+		Genres:       genres,
+
+		Creators: creators,
+		Cast:     cast,
+	}, nil
 }
 
 // FindEpisode returns the episode metadata matching episodeNumber, if present.

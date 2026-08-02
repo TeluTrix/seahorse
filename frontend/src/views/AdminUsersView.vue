@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { api } from '../api/client'
-import type { PublicUser } from '../types'
+import type { PublicUser, Role } from '../types'
 
 const users = ref<PublicUser[]>([])
 const loading = ref(true)
@@ -13,6 +13,7 @@ const successId = ref<string | null>(null)
 const showCreateForm = ref(false)
 const newUserEmail = ref('')
 const newUserPassword = ref('')
+const newUserRole = ref<Role>('user')
 const createError = ref('')
 const creating = ref(false)
 
@@ -31,6 +32,7 @@ function startCreate() {
   showCreateForm.value = true
   newUserEmail.value = ''
   newUserPassword.value = ''
+  newUserRole.value = 'user'
   createError.value = ''
 }
 
@@ -46,7 +48,7 @@ async function createUser() {
   }
   creating.value = true
   try {
-    await api.createUser(newUserEmail.value, newUserPassword.value)
+    await api.createUser(newUserEmail.value, newUserPassword.value, newUserRole.value)
     showCreateForm.value = false
     await load()
   } catch (e) {
@@ -95,6 +97,10 @@ async function savePassword(userId: string) {
     <form v-else class="create-form" @submit.prevent="createUser">
       <input v-model="newUserEmail" type="email" placeholder="Email" required autocomplete="off" />
       <input v-model="newUserPassword" type="password" placeholder="Password (min. 8 characters)" required />
+      <select v-model="newUserRole">
+        <option value="user">User</option>
+        <option value="admin">Admin</option>
+      </select>
       <button type="submit" :disabled="creating">{{ creating ? 'Creating…' : 'Create' }}</button>
       <button type="button" class="secondary" @click="cancelCreate">Cancel</button>
     </form>

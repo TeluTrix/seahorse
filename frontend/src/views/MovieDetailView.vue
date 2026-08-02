@@ -5,10 +5,12 @@ import { api, coverURL } from '../api/client'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import CastList from '../components/CastList.vue'
 import RemuxStatusBadge from '../components/RemuxStatusBadge.vue'
+import { useAuthStore } from '../stores/auth'
 import { useConfigStore } from '../stores/config'
 import type { MediaInfo, Movie } from '../types'
 import { formatBytes, formatCurrency, formatLanguage, formatRuntime, formatTime } from '../utils/format'
 
+const auth = useAuthStore()
 const config = useConfigStore()
 const route = useRoute()
 const router = useRouter()
@@ -36,9 +38,34 @@ async function toggleMediaInfo() {
   }
 }
 
+const refreshing = ref(false)
+const refreshError = ref('')
+// The cover URL is stable (keyed by movie id, not content), so the browser
+// happily serves its cached image even after a refresh replaces the file on
+// disk — this cache-busts it by appending a version the browser hasn't seen.
+const coverCacheBust = ref(0)
+
+async function refreshMetadata() {
+  if (!movie.value) return
+  refreshing.value = true
+  refreshError.value = ''
+  try {
+    movie.value = await api.refreshMovie(movie.value.id)
+    coverCacheBust.value = Date.now()
+    mediaInfo.value = null
+    mediaInfoError.value = false
+  } catch (e) {
+    refreshError.value = e instanceof Error ? e.message : 'could not refresh metadata'
+  } finally {
+    refreshing.value = false
+  }
+}
+
 const posterUrl = computed(() => {
   if (!movie.value) return ''
-  return movie.value.has_local_cover ? coverURL('movies', movie.value.id) : movie.value.poster_url
+  if (!movie.value.has_local_cover) return movie.value.poster_url
+  const url = coverURL('movies', movie.value.id)
+  return coverCacheBust.value ? `${url}&v=${coverCacheBust.value}` : url
 })
 
 const hasResumePoint = computed(() => {
@@ -81,7 +108,17 @@ function play(restart: boolean) {
               <button class="secondary" @click="play(true)">Start Over</button>
             </template>
             <button v-else @click="play(false)">▶ Play</button>
+            <button
+              v-if="auth.isAdmin"
+              class="secondary"
+              :disabled="refreshing"
+              title="Re-fetch this movie's metadata and cover from TMDB"
+              @click="refreshMetadata"
+            >
+              {{ refreshing ? 'Refreshing…' : '⟳ Refresh Metadata' }}
+            </button>
           </div>
+          <p v-if="refreshError" class="error-message">{{ refreshError }}</p>
         </div>
       </div>
     </div>

@@ -5,18 +5,43 @@ import { api, coverURL } from '../api/client'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import CastList from '../components/CastList.vue'
 import RemuxStatusBadge from '../components/RemuxStatusBadge.vue'
+import { useAuthStore } from '../stores/auth'
 import { useConfigStore } from '../stores/config'
 import type { Episode, TVShow } from '../types'
 import { formatRuntime, formatTime } from '../utils/format'
 
+const auth = useAuthStore()
 const config = useConfigStore()
 const route = useRoute()
 const router = useRouter()
 const show = ref<TVShow | null>(null)
 
+const refreshing = ref(false)
+const refreshError = ref('')
+// The cover URL is stable (keyed by show id, not content), so the browser
+// happily serves its cached image even after a refresh replaces the file on
+// disk — this cache-busts it by appending a version the browser hasn't seen.
+const coverCacheBust = ref(0)
+
+async function refreshMetadata() {
+  if (!show.value) return
+  refreshing.value = true
+  refreshError.value = ''
+  try {
+    show.value = await api.refreshTVShow(show.value.id)
+    coverCacheBust.value = Date.now()
+  } catch (e) {
+    refreshError.value = e instanceof Error ? e.message : 'could not refresh metadata'
+  } finally {
+    refreshing.value = false
+  }
+}
+
 const posterUrl = computed(() => {
   if (!show.value) return ''
-  return show.value.has_local_cover ? coverURL('tvshows', show.value.id) : show.value.poster_url
+  if (!show.value.has_local_cover) return show.value.poster_url
+  const url = coverURL('tvshows', show.value.id)
+  return coverCacheBust.value ? `${url}&v=${coverCacheBust.value}` : url
 })
 
 interface FlatEpisode {
@@ -120,6 +145,16 @@ function playEpisode(id: string, restart: boolean) {
         <p class="meta">{{ show.first_air_date }} · ⭐ {{ show.vote_average.toFixed(1) }} · {{ show.genres }}</p>
         <p v-if="show.creators" class="creators">Created by {{ show.creators }}</p>
         <p>{{ show.overview }}</p>
+        <button
+          v-if="auth.isAdmin"
+          class="secondary refresh-button"
+          :disabled="refreshing"
+          title="Re-fetch this show's metadata and cover from TMDB"
+          @click="refreshMetadata"
+        >
+          {{ refreshing ? 'Refreshing…' : '⟳ Refresh Metadata' }}
+        </button>
+        <p v-if="refreshError" class="error-message">{{ refreshError }}</p>
       </div>
     </div>
 
@@ -204,6 +239,9 @@ function playEpisode(id: string, restart: boolean) {
   opacity: 0.8;
   font-size: 0.9rem;
   margin-bottom: 0.5rem;
+}
+.refresh-button {
+  margin-top: 0.5rem;
 }
 .poster {
   width: 200px;

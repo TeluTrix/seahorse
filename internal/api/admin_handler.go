@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TeluTrix/seahorse/internal/models"
 	"github.com/TeluTrix/seahorse/internal/scanner"
 	"github.com/TeluTrix/seahorse/internal/user"
 	"github.com/google/uuid"
@@ -96,11 +97,14 @@ func (h *Handlers) ListUsers(w http.ResponseWriter, r *http.Request) {
 type createUserRequest struct {
 	Email    string `json:"user_email"`
 	Password string `json:"user_password"`
+	Role     string `json:"user_role"`
 }
 
 // CreateUser lets an admin manually create an account, independent of
 // SEAHORSE_DISABLE_REGISTRATION — that setting only gates the public
-// self-service /auth/register endpoint, not this admin-only one.
+// self-service /auth/register endpoint, not this admin-only one. Unlike
+// self-registration, the caller picks the role explicitly (defaulting to
+// "user" if omitted, for backward compatibility with older API clients).
 func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req createUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -114,7 +118,18 @@ func (h *Handlers) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newUser, err := user.CreateUser(req.Email, req.Password)
+	role := models.RoleUser
+	switch models.Role(strings.ToLower(strings.TrimSpace(req.Role))) {
+	case models.RoleAdmin:
+		role = models.RoleAdmin
+	case models.RoleUser, "":
+		role = models.RoleUser
+	default:
+		writeError(w, http.StatusBadRequest, "user_role must be \"user\" or \"admin\"")
+		return
+	}
+
+	newUser, err := user.CreateUserWithRole(req.Email, req.Password, role)
 	if err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "UNIQUE constraint") {
 			writeError(w, http.StatusConflict, "a user with that email already exists")

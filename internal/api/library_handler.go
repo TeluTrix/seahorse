@@ -125,6 +125,24 @@ func (h *Handlers) GetTVShow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	dto, err := h.loadTVShowDetail(r, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeError(w, http.StatusNotFound, "tv show not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "could not load tv show")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dto)
+}
+
+// loadTVShowDetail loads a tv show by id together with its seasons/episodes
+// and the authenticated user's episode progress, returning the same DTO
+// GetTVShow returns — shared with RefreshTVShow, which reloads the show the
+// same way immediately after updating it.
+func (h *Handlers) loadTVShowDetail(r *http.Request, id uuid.UUID) (TVShowDTO, error) {
 	var show models.TVShow
 	query := db.DB.Preload("Seasons", func(tx *gorm.DB) *gorm.DB {
 		return tx.Order("season_number")
@@ -133,12 +151,7 @@ func (h *Handlers) GetTVShow(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err := query.First(&show, "id = ?", id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			writeError(w, http.StatusNotFound, "tv show not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "could not load tv show")
-		return
+		return TVShowDTO{}, err
 	}
 
 	var progressByEpisode map[uuid.UUID]models.WatchProgress
@@ -149,12 +162,12 @@ func (h *Handlers) GetTVShow(w http.ResponseWriter, r *http.Request) {
 				episodeIDs = append(episodeIDs, e.ID)
 			}
 		}
+		var err error
 		progressByEpisode, err = progress.GetMany(userID, models.MediaTypeEpisode, episodeIDs)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "could not load progress")
-			return
+			return TVShowDTO{}, err
 		}
 	}
 
-	writeJSON(w, http.StatusOK, toTVShowDTO(show, progressByEpisode, true, h.Scanner.RemuxState))
+	return toTVShowDTO(show, progressByEpisode, true, h.Scanner.RemuxState), nil
 }

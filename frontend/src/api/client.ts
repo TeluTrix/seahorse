@@ -71,10 +71,12 @@ export const api = {
   getMovie: (id: string) => request<Movie>(`/movies/${id}`),
   getMovieMediaInfo: (id: string) => request<MediaInfo>(`/movies/${id}/mediainfo`),
   refreshMovie: (id: string) => request<Movie>(`/admin/movies/${id}/refresh`, { method: 'POST' }),
+  replaceMovie: (id: string) => request<Movie>(`/admin/movies/${id}/replace`, { method: 'POST' }),
   listTVShows: (page = 1, pageSize = 48, sort?: 'newest') =>
     request<TVShowsPage>(`/tvshows?page=${page}&page_size=${pageSize}${sort ? `&sort=${sort}` : ''}`),
   getTVShow: (id: string) => request<TVShow>(`/tvshows/${id}`),
   refreshTVShow: (id: string) => request<TVShow>(`/admin/tvshows/${id}/refresh`, { method: 'POST' }),
+  replaceTVShow: (id: string) => request<TVShow>(`/admin/tvshows/${id}/replace`, { method: 'POST' }),
   getEpisode: (id: string) => request<EpisodeContext>(`/episodes/${id}`),
   getNextEpisode: async (id: string): Promise<NextEpisode | null> => {
     try {

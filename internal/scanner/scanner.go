@@ -573,7 +573,7 @@ func (s *Scanner) scan(libraryPath string) error {
 			}
 			s.setStatus(func(st *Status) { st.CurrentItem = "movie: " + entry.Name() })
 
-			added, scanErr := s.scanMovie(moviesPath, entry.Name())
+			added, scanErr := s.ScanMovie(moviesPath, entry.Name())
 			if scanErr != nil {
 				slog.Warn("skipping movie folder", "folder", entry.Name(), "error", scanErr)
 				continue
@@ -593,7 +593,7 @@ func (s *Scanner) scan(libraryPath string) error {
 			}
 			s.setStatus(func(st *Status) { st.CurrentItem = "tv show: " + entry.Name() })
 
-			isNewShow, n, scanErr := s.scanTVShow(tvPath, entry.Name())
+			isNewShow, n, scanErr := s.ScanTVShow(tvPath, entry.Name())
 			if scanErr != nil {
 				slog.Warn("skipping tv show folder", "folder", entry.Name(), "error", scanErr)
 				continue
@@ -640,9 +640,13 @@ func normalizedPath(dir, name string) string {
 	return norm.NFC.String(filepath.Join(dir, name))
 }
 
-// scanMovie returns whether a new movie was added. Movies already known by
-// FilePath are left completely untouched (no re-fetch of metadata).
-func (s *Scanner) scanMovie(moviesRoot, folderName string) (bool, error) {
+// ScanMovie returns whether a new movie was added. Movies already known by
+// FilePath are left completely untouched (no re-fetch of metadata) — exported
+// so an admin action can force-rediscover a single movie from scratch (a
+// fresh TMDB search, not just a re-fetch by the same TMDB ID) by deleting its
+// row first and calling this directly, the per-item equivalent of a full
+// library rescan.
+func (s *Scanner) ScanMovie(moviesRoot, folderName string) (bool, error) {
 	// Prefer the strict "Title (Year)" pattern for a more accurate TMDB
 	// match, but don't give up on folders that lack it — fall back to
 	// searching by the whole folder name with no year constraint (which
@@ -714,9 +718,12 @@ func (s *Scanner) scanMovie(moviesRoot, folderName string) (bool, error) {
 	return true, db.DB.Create(&movie).Error
 }
 
-// scanTVShow returns whether the show itself is new, plus the number of new
-// episodes found (which can be > 0 even for an already-known show).
-func (s *Scanner) scanTVShow(tvRoot, folderName string) (bool, int, error) {
+// ScanTVShow returns whether the show itself is new, plus the number of new
+// episodes found (which can be > 0 even for an already-known show) —
+// exported for the same reason as ScanMovie: an admin action can
+// force-rediscover a single show (and all its seasons/episodes) from scratch
+// by deleting its rows first and calling this directly.
+func (s *Scanner) ScanTVShow(tvRoot, folderName string) (bool, int, error) {
 	// See scanMovie: fall back to a title-only search (no year constraint)
 	// rather than skipping the folder outright when it doesn't match the
 	// strict "Title (Year)" pattern.

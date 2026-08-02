@@ -37,6 +37,36 @@ async function refreshMetadata() {
   }
 }
 
+const replacing = ref(false)
+const replaceError = ref('')
+
+async function replaceMetadata() {
+  if (!show.value) return
+  if (
+    !confirm(
+      "This deletes this show's seasons, episodes, cached cover, and metadata, then re-discovers everything from scratch via a new TMDB search (the only way to fix a wrong match or re-derive episode titles/overviews). Any watch progress for its episodes will be lost. Continue?",
+    )
+  ) {
+    return
+  }
+  replacing.value = true
+  replaceError.value = ''
+  try {
+    const updated = await api.replaceTVShow(show.value.id)
+    // Unlike refreshMetadata, this assigns the show a brand new id (a full
+    // rediscovery, not an in-place update) — move the URL to match so a
+    // refresh or the back button doesn't land on the now-deleted old id.
+    // App.vue keys <RouterView> on the full path, so this remounts the page
+    // fresh rather than leaving stale local state around.
+    show.value = updated
+    await router.replace({ name: 'tvshow', params: { id: updated.id } })
+  } catch (e) {
+    replaceError.value = e instanceof Error ? e.message : 'could not replace metadata'
+  } finally {
+    replacing.value = false
+  }
+}
+
 const posterUrl = computed(() => {
   if (!show.value) return ''
   if (!show.value.has_local_cover) return show.value.poster_url
@@ -145,16 +175,28 @@ function playEpisode(id: string, restart: boolean) {
         <p class="meta">{{ show.first_air_date }} · ⭐ {{ show.vote_average.toFixed(1) }} · {{ show.genres }}</p>
         <p v-if="show.creators" class="creators">Created by {{ show.creators }}</p>
         <p>{{ show.overview }}</p>
-        <button
-          v-if="auth.isAdmin"
-          class="secondary refresh-button"
-          :disabled="refreshing"
-          title="Re-fetch this show's metadata and cover from TMDB"
-          @click="refreshMetadata"
-        >
-          {{ refreshing ? 'Refreshing…' : '⟳ Refresh Metadata' }}
-        </button>
+        <div class="refresh-actions">
+          <button
+            v-if="auth.isAdmin"
+            class="secondary"
+            :disabled="refreshing || replacing"
+            title="Re-fetch this show's metadata and cover from TMDB, keeping the same match"
+            @click="refreshMetadata"
+          >
+            {{ refreshing ? 'Refreshing…' : '⟳ Refresh Metadata' }}
+          </button>
+          <button
+            v-if="auth.isAdmin"
+            class="secondary"
+            :disabled="refreshing || replacing"
+            title="Delete and re-discover this show, its seasons, and episodes from scratch (a new TMDB search) — fixes a wrong match"
+            @click="replaceMetadata"
+          >
+            {{ replacing ? 'Rescanning…' : '⟲ Full Rescan' }}
+          </button>
+        </div>
         <p v-if="refreshError" class="error-message">{{ refreshError }}</p>
+        <p v-if="replaceError" class="error-message">{{ replaceError }}</p>
       </div>
     </div>
 
@@ -240,7 +282,9 @@ function playEpisode(id: string, restart: boolean) {
   font-size: 0.9rem;
   margin-bottom: 0.5rem;
 }
-.refresh-button {
+.refresh-actions {
+  display: flex;
+  gap: 0.5rem;
   margin-top: 0.5rem;
 }
 .poster {

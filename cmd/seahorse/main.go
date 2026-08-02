@@ -56,7 +56,9 @@ func main() {
 	apiRouter.Handle("/tvshows", authenticator.RequireAuth(http.HandlerFunc(handlers.ListTVShows))).Methods("GET")
 	apiRouter.Handle("/tvshows/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.GetTVShow))).Methods("GET")
 	apiRouter.Handle("/admin/movies/{id}/refresh", authenticator.RequireAdmin(http.HandlerFunc(handlers.RefreshMovie))).Methods("POST")
+	apiRouter.Handle("/admin/movies/{id}/replace", authenticator.RequireAdmin(http.HandlerFunc(handlers.ReplaceMovie))).Methods("POST")
 	apiRouter.Handle("/admin/tvshows/{id}/refresh", authenticator.RequireAdmin(http.HandlerFunc(handlers.RefreshTVShow))).Methods("POST")
+	apiRouter.Handle("/admin/tvshows/{id}/replace", authenticator.RequireAdmin(http.HandlerFunc(handlers.ReplaceTVShow))).Methods("POST")
 
 	apiRouter.Handle("/episodes/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.GetEpisode))).Methods("GET")
 	apiRouter.Handle("/episodes/{id}/next", authenticator.RequireAuth(http.HandlerFunc(handlers.NextEpisode))).Methods("GET")

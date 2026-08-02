@@ -61,6 +61,36 @@ async function refreshMetadata() {
   }
 }
 
+const replacing = ref(false)
+const replaceError = ref('')
+
+async function replaceMetadata() {
+  if (!movie.value) return
+  if (
+    !confirm(
+      "This deletes this movie's cached cover and metadata, then re-discovers it from scratch via a new TMDB search (the only way to fix a wrong match). Any watch progress for it will be lost. Continue?",
+    )
+  ) {
+    return
+  }
+  replacing.value = true
+  replaceError.value = ''
+  try {
+    const updated = await api.replaceMovie(movie.value.id)
+    // Unlike refreshMetadata, this assigns the movie a brand new id (a full
+    // rediscovery, not an in-place update) — move the URL to match so a
+    // refresh or the back button doesn't land on the now-deleted old id.
+    // App.vue keys <RouterView> on the full path, so this remounts the page
+    // fresh rather than leaving stale local state around.
+    movie.value = updated
+    await router.replace({ name: 'movie', params: { id: updated.id } })
+  } catch (e) {
+    replaceError.value = e instanceof Error ? e.message : 'could not replace metadata'
+  } finally {
+    replacing.value = false
+  }
+}
+
 const posterUrl = computed(() => {
   if (!movie.value) return ''
   if (!movie.value.has_local_cover) return movie.value.poster_url
@@ -111,14 +141,24 @@ function play(restart: boolean) {
             <button
               v-if="auth.isAdmin"
               class="secondary"
-              :disabled="refreshing"
-              title="Re-fetch this movie's metadata and cover from TMDB"
+              :disabled="refreshing || replacing"
+              title="Re-fetch this movie's metadata and cover from TMDB, keeping the same match"
               @click="refreshMetadata"
             >
               {{ refreshing ? 'Refreshing…' : '⟳ Refresh Metadata' }}
             </button>
+            <button
+              v-if="auth.isAdmin"
+              class="secondary"
+              :disabled="refreshing || replacing"
+              title="Delete and re-discover this movie from scratch (a new TMDB search) — fixes a wrong match"
+              @click="replaceMetadata"
+            >
+              {{ replacing ? 'Rescanning…' : '⟲ Full Rescan' }}
+            </button>
           </div>
           <p v-if="refreshError" class="error-message">{{ refreshError }}</p>
+          <p v-if="replaceError" class="error-message">{{ replaceError }}</p>
         </div>
       </div>
     </div>

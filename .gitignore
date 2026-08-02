@@ -37,6 +37,7 @@ go.work.sum
 
 # Build output
 /bin/
+/dist/
 
 # Frontend
 frontend/node_modules/

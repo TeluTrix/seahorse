@@ -1,0 +1,16 @@
+name: seahorse
+arch: "__PKG_ARCH__"
+platform: linux
+version: "__PKG_VERSION__"
+section: net
+priority: optional
+maintainer: "seahorse maintainers"
+description: Self-hosted media server with a Go backend and Vue frontend.
+homepage: https://github.com/TeluTrix/seahorse
+license: Apache-2.0
+
+contents:
+  - src: "__PKG_BINARY__"
+    dst: /usr/bin/seahorse
+    file_info:
+      mode: 0755

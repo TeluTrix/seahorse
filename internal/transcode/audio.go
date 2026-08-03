@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/TeluTrix/seahorse/internal/ffmpeg"
+	"golang.org/x/sync/singleflight"
 )
 
 var browserCompatibleAudioCodecs = map[string]bool{
@@ -383,54 +384,75 @@ func AudioTrackPath(videoPath string, streamIndex int) string {
 // (internal/api/subtitles_handler.go's serveSubtitleTrack) — most viewers
 // never touch the language picker, and a multi-track file can have several
 // tracks nobody ever selects.
+//
+// A <video> element commonly issues more than one overlapping request for a
+// freshly-selected track (an initial probe plus a ranged fetch, or a
+// buffering-ahead request racing the first one) — without trackGroup below,
+// each landed here concurrently, saw dest not yet exist, and started its own
+// ffmpeg process writing the same tmpDest path, corrupting or truncating
+// each other's output and failing most of the requests with a 500. Keying
+// on dest serializes concurrent callers for the *same* track onto a single
+// ffmpeg run that they all share the result of, while different tracks (or
+// different videos) still generate fully in parallel.
+var trackGroup singleflight.Group
+
 func EnsureAudioTrack(videoPath string, streamIndex int, opts Options) error {
 	dest := AudioTrackPath(videoPath, streamIndex)
 	if _, err := os.Stat(dest); err == nil {
 		return nil
 	}
 
-	streams, err := probeAudioStreams(videoPath, opts.ProbeTimeout)
-	if err != nil {
-		return fmt.Errorf("could not probe audio streams: %w", err)
-	}
-	ordinal := -1
-	var codec string
-	for i, s := range streams {
-		if s.Index == streamIndex {
-			ordinal = i
-			codec = s.CodecName
-			break
+	_, err, _ := trackGroup.Do(dest, func() (any, error) {
+		// Re-check now that we hold this key's turn: another caller may have
+		// already generated dest while we were waiting to enter Do.
+		if _, err := os.Stat(dest); err == nil {
+			return nil, nil
 		}
-	}
-	if ordinal == -1 {
-		return fmt.Errorf("no audio stream with index %d in %s", streamIndex, videoPath)
-	}
 
-	destExt := filepath.Ext(dest)
-	tmpDest := strings.TrimSuffix(dest, destExt) + ".tmp" + destExt
-	defer os.Remove(tmpDest)
+		streams, err := probeAudioStreams(videoPath, opts.ProbeTimeout)
+		if err != nil {
+			return nil, fmt.Errorf("could not probe audio streams: %w", err)
+		}
+		ordinal := -1
+		var codec string
+		for i, s := range streams {
+			if s.Index == streamIndex {
+				ordinal = i
+				codec = s.CodecName
+				break
+			}
+		}
+		if ordinal == -1 {
+			return nil, fmt.Errorf("no audio stream with index %d in %s", streamIndex, videoPath)
+		}
 
-	ctx, cancel := context.WithTimeout(context.Background(), opts.RemuxTimeout)
-	defer cancel()
+		destExt := filepath.Ext(dest)
+		tmpDest := strings.TrimSuffix(dest, destExt) + ".tmp" + destExt
+		defer os.Remove(tmpDest)
 
-	args := []string{
-		"-y", "-i", videoPath,
-		"-map", "0:v:0", "-c:v", "copy",
-		"-map", fmt.Sprintf("0:%d", streamIndex),
-		"-map_metadata:s:a:0", fmt.Sprintf("0:s:a:%d", ordinal),
-	}
-	if browserCompatibleAudioCodecs[codec] {
-		args = append(args, "-c:a:0", "copy")
-	} else {
-		args = append(args, "-c:a:0", "aac", "-b:a:0", opts.AudioBitrate)
-	}
-	args = append(args, tmpDest)
+		ctx, cancel := context.WithTimeout(context.Background(), opts.RemuxTimeout)
+		defer cancel()
 
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ffmpeg audio track extraction failed (or timed out after %s): %w: %s", opts.RemuxTimeout, err, stderr.String())
-	}
-	return os.Rename(tmpDest, dest)
+		args := []string{
+			"-y", "-i", videoPath,
+			"-map", "0:v:0", "-c:v", "copy",
+			"-map", fmt.Sprintf("0:%d", streamIndex),
+			"-map_metadata:s:a:0", fmt.Sprintf("0:s:a:%d", ordinal),
+		}
+		if browserCompatibleAudioCodecs[codec] {
+			args = append(args, "-c:a:0", "copy")
+		} else {
+			args = append(args, "-c:a:0", "aac", "-b:a:0", opts.AudioBitrate)
+		}
+		args = append(args, tmpDest)
+
+		cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("ffmpeg audio track extraction failed (or timed out after %s): %w: %s", opts.RemuxTimeout, err, stderr.String())
+		}
+		return nil, os.Rename(tmpDest, dest)
+	})
+	return err
 }

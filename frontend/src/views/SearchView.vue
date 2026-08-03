@@ -80,23 +80,23 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="search-view">
-    <form class="filters" @submit.prevent="handleSubmit">
-      <input v-model="q" type="text" placeholder="Search by title..." class="q-input" />
-      <input v-model="year" type="text" placeholder="Year" maxlength="4" class="year-input" />
-      <select v-model="genre">
+  <div>
+    <form class="mb-8 flex flex-wrap items-center gap-3" @submit.prevent="handleSubmit">
+      <input v-model="q" type="text" placeholder="Search by title..." class="field w-auto min-w-[220px]" />
+      <input v-model="year" type="text" placeholder="Year" maxlength="4" class="field w-[100px]" />
+      <select v-model="genre" class="field w-auto cursor-pointer">
         <option value="">All genres</option>
         <option v-for="g in genres" :key="g" :value="g">{{ g }}</option>
       </select>
-      <button type="submit">Search</button>
+      <button type="submit" class="btn-primary">Search</button>
     </form>
 
-    <div v-if="loading" class="center"><div class="spinner" /></div>
+    <div v-if="loading" class="flex justify-center p-16"><div class="spinner" /></div>
     <template v-else-if="searched">
-      <section>
-        <h2>Movies</h2>
-        <p v-if="!movies.length" class="empty">No matching movies.</p>
-        <div class="grid">
+      <section class="mb-10">
+        <h2 class="mb-3 text-lg font-black tracking-tight">Movies</h2>
+        <p v-if="!movies.length" class="text-text-dim">No matching movies.</p>
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-5">
           <PosterCard
             v-for="movie in movies"
             :key="movie.id"
@@ -109,10 +109,10 @@ onMounted(async () => {
         </div>
       </section>
 
-      <section>
-        <h2>TV Shows</h2>
-        <p v-if="!shows.length" class="empty">No matching tv shows.</p>
-        <div class="grid">
+      <section class="mb-10">
+        <h2 class="mb-3 text-lg font-black tracking-tight">TV Shows</h2>
+        <p v-if="!shows.length" class="text-text-dim">No matching tv shows.</p>
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-5">
           <PosterCard
             v-for="show in shows"
             :key="show.id"
@@ -124,44 +124,11 @@ onMounted(async () => {
         </div>
       </section>
 
-      <div v-if="maxPages() > 1" class="pagination">
-        <button class="secondary" :disabled="page <= 1" @click="goToPage(page - 1)">Prev</button>
-        <span class="page-indicator">Page {{ page }} of {{ maxPages() }}</span>
-        <button class="secondary" :disabled="page >= maxPages()" @click="goToPage(page + 1)">Next</button>
+      <div v-if="maxPages() > 1" class="mt-4 flex items-center gap-4">
+        <button class="btn-secondary" :disabled="page <= 1" @click="goToPage(page - 1)">Prev</button>
+        <span class="text-sm text-text-dim">Page {{ page }} of {{ maxPages() }}</span>
+        <button class="btn-secondary" :disabled="page >= maxPages()" @click="goToPage(page + 1)">Next</button>
       </div>
     </template>
   </div>
 </template>
-
-<style scoped>
-.filters {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 2rem;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.filters input,
-.filters select {
-  width: auto;
-}
-.q-input {
-  min-width: 220px;
-}
-.year-input {
-  width: 100px !important;
-}
-section {
-  margin-bottom: 2.5rem;
-}
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1.25rem;
-}
-.center {
-  display: flex;
-  justify-content: center;
-  padding: 4rem;
-}
-</style>

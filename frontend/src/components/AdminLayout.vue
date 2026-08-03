@@ -1,47 +1,21 @@
 <script setup lang="ts"></script>
 
 <template>
-  <div class="admin-layout">
-    <nav class="sidebar">
-      <RouterLink to="/admin/library" class="sidebar-link">Library</RouterLink>
-      <RouterLink to="/admin/users" class="sidebar-link">Users</RouterLink>
+  <div class="flex items-start gap-8">
+    <nav class="flex w-40 shrink-0 flex-col gap-1">
+      <RouterLink
+        to="/admin/library"
+        class="rounded-lg px-3.5 py-2.5 text-text-dim no-underline hover:bg-bg-alt hover:text-text [&.router-link-active]:bg-bg-alt [&.router-link-active]:font-semibold [&.router-link-active]:text-text"
+        >Library</RouterLink
+      >
+      <RouterLink
+        to="/admin/users"
+        class="rounded-lg px-3.5 py-2.5 text-text-dim no-underline hover:bg-bg-alt hover:text-text [&.router-link-active]:bg-bg-alt [&.router-link-active]:font-semibold [&.router-link-active]:text-text"
+        >Users</RouterLink
+      >
     </nav>
-    <div class="admin-content">
+    <div class="min-w-0 flex-1">
       <RouterView />
     </div>
   </div>
 </template>
-
-<style scoped>
-.admin-layout {
-  display: flex;
-  gap: 2rem;
-  align-items: flex-start;
-}
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  width: 160px;
-  flex-shrink: 0;
-}
-.sidebar-link {
-  padding: 0.6rem 0.9rem;
-  border-radius: 6px;
-  text-decoration: none;
-  color: var(--text-dim);
-}
-.sidebar-link:hover {
-  background: var(--bg-alt);
-  color: var(--text);
-}
-.sidebar-link.router-link-active {
-  background: var(--bg-alt);
-  color: var(--text);
-  font-weight: 600;
-}
-.admin-content {
-  flex: 1;
-  min-width: 0;
-}
-</style>

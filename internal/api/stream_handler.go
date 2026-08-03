@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/TeluTrix/seahorse/internal/db"
@@ -28,12 +29,32 @@ var videoMimeTypes = map[string]string{
 	".avi":  "video/x-msvideo",
 }
 
-func serveVideoFile(w http.ResponseWriter, r *http.Request, filePath string) {
-	// Prefer a cached audio-remuxed copy over the original, when the scanner
-	// found the original's audio codec incompatible with browser playback
-	// (see internal/transcode) — resolved at request time, same pattern as
-	// cover/subtitle caching, no DB column needed.
-	if remuxed := transcode.RemuxedPath(filePath); fileExists(remuxed) {
+func serveVideoFile(w http.ResponseWriter, r *http.Request, filePath string, opts transcode.Options) {
+	// An explicit "?track=" means the viewer picked a specific audio
+	// language out of a multi-audio-track file (see
+	// transcode.EnsureAudioTrack for why this has to mean "serve a
+	// different, single-track file" rather than a client-side track
+	// switch) — lazily prepared here, on first request for that track.
+	// Absent, this is a completely ordinary request: same fast path as
+	// before, no new probing cost for the overwhelmingly common case of a
+	// file with zero or one audio stream.
+	if trackParam := r.URL.Query().Get("track"); trackParam != "" {
+		streamIndex, err := strconv.Atoi(trackParam)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid track parameter")
+			return
+		}
+		if err := transcode.EnsureAudioTrack(filePath, streamIndex, opts); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not prepare requested audio track")
+			return
+		}
+		filePath = transcode.AudioTrackPath(filePath, streamIndex)
+	} else if remuxed := transcode.RemuxedPath(filePath); fileExists(remuxed) {
+		// Prefer a cached audio-remuxed copy over the original, when the
+		// scanner found the original's (single) audio codec incompatible
+		// with browser playback (see internal/transcode) — resolved at
+		// request time, same pattern as cover/subtitle caching, no DB
+		// column needed.
 		filePath = remuxed
 	}
 
@@ -74,7 +95,7 @@ func (h *Handlers) StreamMovie(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serveVideoFile(w, r, movie.FilePath)
+	serveVideoFile(w, r, movie.FilePath, h.Scanner.TranscodeOptions())
 }
 
 func (h *Handlers) StreamEpisode(w http.ResponseWriter, r *http.Request) {
@@ -94,5 +115,5 @@ func (h *Handlers) StreamEpisode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serveVideoFile(w, r, episode.FilePath)
+	serveVideoFile(w, r, episode.FilePath, h.Scanner.TranscodeOptions())
 }

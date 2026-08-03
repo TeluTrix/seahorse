@@ -1,6 +1,7 @@
 import type {
   ActorFilmography,
   ActorsPage,
+  AudioTrack,
   AuthResponse,
   ClientConfig,
   EpisodeContext,
@@ -142,13 +143,18 @@ export const api = {
     }
   },
   listSubtitles: (kind: 'movies' | 'episodes', id: string) => request<SubtitleTrack[]>(`/subtitles/${kind}/${id}`),
+  listAudioTracks: (kind: 'movies' | 'episodes', id: string) => request<AudioTrack[]>(`/audio/${kind}/${id}`),
 }
 
 // Native <video>/<img>/<track> elements can't set an Authorization header, so
-// these endpoints also accept the JWT as a query param.
-export function streamURL(kind: 'movies' | 'episodes', id: string): string {
+// these endpoints also accept the JWT as a query param. An optional track id
+// asks for a specific audio language out of a multi-audio-track file (see
+// internal/transcode.EnsureAudioTrack) — omitted, the server's ordinary
+// default applies, unchanged from before audio track switching existed.
+export function streamURL(kind: 'movies' | 'episodes', id: string, track?: string): string {
   const token = localStorage.getItem(TOKEN_KEY) ?? ''
-  return `${BASE}/stream/${kind}/${id}?token=${encodeURIComponent(token)}`
+  const trackParam = track ? `&track=${encodeURIComponent(track)}` : ''
+  return `${BASE}/stream/${kind}/${id}?token=${encodeURIComponent(token)}${trackParam}`
 }
 
 export function coverURL(kind: 'movies' | 'tvshows', id: string): string {

@@ -35,12 +35,14 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div v-if="loading" class="center"><div class="spinner" /></div>
+  <div v-if="loading" class="flex justify-center p-16"><div class="spinner" /></div>
   <template v-else>
-    <section>
-      <h2><RouterLink :to="{ name: 'movies-overview' }">Movies</RouterLink></h2>
-      <p v-if="!movies.length" class="empty">No movies yet. Ask an admin to scan the library.</p>
-      <div class="grid">
+    <section class="mb-10">
+      <h2 class="mb-3 text-lg font-black tracking-tight">
+        <RouterLink :to="{ name: 'movies-overview' }" class="no-underline hover:underline">Movies</RouterLink>
+      </h2>
+      <p v-if="!movies.length" class="text-text-dim">No movies yet. Ask an admin to scan the library.</p>
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-5">
         <PosterCard
           v-for="movie in movies"
           :key="movie.id"
@@ -53,10 +55,12 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section>
-      <h2><RouterLink :to="{ name: 'tvshows-overview' }">TV Shows</RouterLink></h2>
-      <p v-if="!shows.length" class="empty">No tv shows yet. Ask an admin to scan the library.</p>
-      <div class="grid">
+    <section class="mb-10">
+      <h2 class="mb-3 text-lg font-black tracking-tight">
+        <RouterLink :to="{ name: 'tvshows-overview' }" class="no-underline hover:underline">TV Shows</RouterLink>
+      </h2>
+      <p v-if="!shows.length" class="text-text-dim">No tv shows yet. Ask an admin to scan the library.</p>
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-5">
         <PosterCard
           v-for="show in shows"
           :key="show.id"
@@ -69,25 +73,3 @@ onMounted(async () => {
     </section>
   </template>
 </template>
-
-<style scoped>
-section {
-  margin-bottom: 2.5rem;
-}
-h2 a {
-  text-decoration: none;
-}
-h2 a:hover {
-  text-decoration: underline;
-}
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1.25rem;
-}
-.center {
-  display: flex;
-  justify-content: center;
-  padding: 4rem;
-}
-</style>

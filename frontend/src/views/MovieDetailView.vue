@@ -116,31 +116,40 @@ function play(restart: boolean) {
   <div v-if="movie">
     <Breadcrumbs :trail="[{ label: 'Movies', to: '/movies' }]" :current="movie.title" fallback="/movies" />
     <div
-      class="detail"
+      class="overflow-hidden rounded-2xl bg-cover bg-center"
       :style="movie.backdrop_url ? { backgroundImage: `url(${movie.backdrop_url})` } : undefined"
     >
-      <div class="overlay">
-        <img v-if="posterUrl" :src="posterUrl" :alt="movie.title" class="poster" />
-        <div>
-          <h1>{{ movie.title }}</h1>
-          <p class="meta">
+      <div
+        class="flex flex-col gap-6 bg-gradient-to-t from-black/90 via-black/70 to-black/40 p-5 text-white sm:flex-row sm:gap-8 sm:p-8"
+      >
+        <img
+          v-if="posterUrl"
+          :src="posterUrl"
+          :alt="movie.title"
+          class="h-fit w-36 shrink-0 self-start rounded-lg sm:w-56"
+        />
+        <div class="min-w-0">
+          <h1 class="text-2xl font-black tracking-tight sm:text-4xl">{{ movie.title }}</h1>
+          <p class="mt-1.5 mb-1 text-white/80">
             {{ movie.release_date }}
             <template v-if="movie.runtime_minutes"> · {{ formatRuntime(movie.runtime_minutes) }}</template>
             · ⭐ {{ movie.vote_average.toFixed(1) }} · {{ movie.genres }}
           </p>
-          <p v-if="movie.director" class="director">Directed by {{ movie.director }}</p>
-          <RemuxStatusBadge :status="movie.remux_status" class="remux-notice" />
-          <p v-if="movie.tagline" class="tagline">"{{ movie.tagline }}"</p>
-          <p class="overview">{{ movie.overview }}</p>
-          <div class="actions">
+          <p v-if="movie.director" class="mb-4 text-sm text-white/80">Directed by {{ movie.director }}</p>
+          <RemuxStatusBadge :status="movie.remux_status" class="mb-4 block w-fit" />
+          <p v-if="movie.tagline" class="mb-3 text-white/70 italic">"{{ movie.tagline }}"</p>
+          <p class="mb-6 max-w-[60ch]">{{ movie.overview }}</p>
+          <div class="flex flex-wrap gap-3">
             <template v-if="hasResumePoint">
-              <button @click="play(false)">▶ Resume from {{ formatTime(movie.progress!.position_seconds) }}</button>
-              <button class="secondary" @click="play(true)">Start Over</button>
+              <button class="btn-primary" @click="play(false)">
+                ▶ Resume from {{ formatTime(movie.progress!.position_seconds) }}
+              </button>
+              <button class="btn-secondary" @click="play(true)">Start Over</button>
             </template>
-            <button v-else @click="play(false)">▶ Play</button>
+            <button v-else class="btn-primary" @click="play(false)">▶ Play</button>
             <button
               v-if="auth.isAdmin"
-              class="secondary"
+              class="btn-secondary"
               :disabled="refreshing || replacing"
               title="Re-fetch this movie's metadata and cover from TMDB, keeping the same match"
               @click="refreshMetadata"
@@ -149,7 +158,7 @@ function play(restart: boolean) {
             </button>
             <button
               v-if="auth.isAdmin"
-              class="secondary"
+              class="btn-secondary"
               :disabled="refreshing || replacing"
               title="Delete and re-discover this movie from scratch (a new TMDB search) — fixes a wrong match"
               @click="replaceMetadata"
@@ -157,8 +166,12 @@ function play(restart: boolean) {
               {{ replacing ? 'Rescanning…' : '⟲ Full Rescan' }}
             </button>
           </div>
-          <p v-if="refreshError" class="error-message">{{ refreshError }}</p>
-          <p v-if="replaceError" class="error-message">{{ replaceError }}</p>
+          <p v-if="refreshError" class="mt-3 rounded-lg border border-danger bg-danger/10 px-3.5 py-2.5 text-sm text-danger">
+            {{ refreshError }}
+          </p>
+          <p v-if="replaceError" class="mt-3 rounded-lg border border-danger bg-danger/10 px-3.5 py-2.5 text-sm text-danger">
+            {{ replaceError }}
+          </p>
         </div>
       </div>
     </div>
@@ -169,157 +182,73 @@ function play(restart: boolean) {
       v-if="
         movie.original_language || movie.budget || movie.revenue || movie.production_companies || movie.production_countries
       "
-      class="details-section"
+      class="mt-8"
     >
-      <h2>Details</h2>
-      <dl class="details-grid">
+      <h2 class="mb-3 text-lg font-black tracking-tight">Details</h2>
+      <dl class="m-0 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
         <template v-if="movie.original_language">
-          <dt>Original Language</dt>
-          <dd>{{ formatLanguage(movie.original_language) }}</dd>
+          <dt class="text-[0.85rem] text-text-dim">Original Language</dt>
+          <dd class="m-0">{{ formatLanguage(movie.original_language) }}</dd>
         </template>
         <template v-if="movie.budget">
-          <dt>Budget</dt>
-          <dd>{{ formatCurrency(movie.budget) }}</dd>
+          <dt class="text-[0.85rem] text-text-dim">Budget</dt>
+          <dd class="m-0">{{ formatCurrency(movie.budget) }}</dd>
         </template>
         <template v-if="movie.revenue">
-          <dt>Revenue</dt>
-          <dd>{{ formatCurrency(movie.revenue) }}</dd>
+          <dt class="text-[0.85rem] text-text-dim">Revenue</dt>
+          <dd class="m-0">{{ formatCurrency(movie.revenue) }}</dd>
         </template>
         <template v-if="movie.production_companies">
-          <dt>Production</dt>
-          <dd>{{ movie.production_companies }}</dd>
+          <dt class="text-[0.85rem] text-text-dim">Production</dt>
+          <dd class="m-0">{{ movie.production_companies }}</dd>
         </template>
         <template v-if="movie.production_countries">
-          <dt>Countries</dt>
-          <dd>{{ movie.production_countries }}</dd>
+          <dt class="text-[0.85rem] text-text-dim">Countries</dt>
+          <dd class="m-0">{{ movie.production_countries }}</dd>
         </template>
       </dl>
     </section>
 
-    <section class="media-info-section">
-      <button class="media-info-toggle" @click="toggleMediaInfo">
-        <span class="chevron" :class="{ open: mediaInfoOpen }">▸</span> Media Info
+    <section class="mt-8">
+      <button
+        class="inline-flex items-center gap-2 rounded-lg border border-border bg-transparent px-3.5 py-2 text-sm text-text"
+        @click="toggleMediaInfo"
+      >
+        <span class="inline-block text-xs transition-transform duration-150" :class="{ 'rotate-90': mediaInfoOpen }"
+          >▸</span
+        >
+        Media Info
       </button>
-      <div v-if="mediaInfoOpen" class="media-info-body">
+      <div v-if="mediaInfoOpen" class="mt-4">
         <div v-if="mediaInfoLoading" class="spinner" />
-        <p v-else-if="mediaInfoError" class="empty">Media info unavailable.</p>
-        <dl v-else-if="mediaInfo" class="details-grid">
+        <p v-else-if="mediaInfoError" class="text-text-dim">Media info unavailable.</p>
+        <dl v-else-if="mediaInfo" class="m-0 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
           <template v-if="mediaInfo.width && mediaInfo.height">
-            <dt>Resolution</dt>
-            <dd>{{ mediaInfo.width }}×{{ mediaInfo.height }}</dd>
+            <dt class="text-[0.85rem] text-text-dim">Resolution</dt>
+            <dd class="m-0">{{ mediaInfo.width }}×{{ mediaInfo.height }}</dd>
           </template>
           <template v-if="mediaInfo.video_codec">
-            <dt>Video Codec</dt>
-            <dd>{{ mediaInfo.video_codec }}</dd>
+            <dt class="text-[0.85rem] text-text-dim">Video Codec</dt>
+            <dd class="m-0">{{ mediaInfo.video_codec }}</dd>
           </template>
           <template v-if="mediaInfo.audio_codec">
-            <dt>Audio Codec</dt>
-            <dd>{{ mediaInfo.audio_codec }}<span v-if="mediaInfo.audio_channels"> · {{ mediaInfo.audio_channels }}ch</span></dd>
+            <dt class="text-[0.85rem] text-text-dim">Audio Codec</dt>
+            <dd class="m-0">
+              {{ mediaInfo.audio_codec }}<span v-if="mediaInfo.audio_channels"> · {{ mediaInfo.audio_channels }}ch</span>
+            </dd>
           </template>
           <template v-if="mediaInfo.container">
-            <dt>Container</dt>
-            <dd>{{ mediaInfo.container }}</dd>
+            <dt class="text-[0.85rem] text-text-dim">Container</dt>
+            <dd class="m-0">{{ mediaInfo.container }}</dd>
           </template>
-          <dt>File Size</dt>
-          <dd>{{ formatBytes(mediaInfo.file_size_bytes) }}</dd>
+          <dt class="text-[0.85rem] text-text-dim">File Size</dt>
+          <dd class="m-0">{{ formatBytes(mediaInfo.file_size_bytes) }}</dd>
           <template v-if="mediaInfo.bitrate_kbps">
-            <dt>Bitrate</dt>
-            <dd>{{ mediaInfo.bitrate_kbps }} kbps</dd>
+            <dt class="text-[0.85rem] text-text-dim">Bitrate</dt>
+            <dd class="m-0">{{ mediaInfo.bitrate_kbps }} kbps</dd>
           </template>
         </dl>
       </div>
     </section>
   </div>
 </template>
-
-<style scoped>
-.detail {
-  background-size: cover;
-  background-position: center;
-  border-radius: 8px;
-}
-.overlay {
-  display: flex;
-  gap: 2rem;
-  padding: 2rem;
-  background: rgba(0, 0, 0, 0.6);
-  border-radius: 8px;
-  color: #fff;
-}
-.poster {
-  width: 220px;
-  border-radius: 6px;
-  height: fit-content;
-}
-.meta {
-  opacity: 0.8;
-  margin-bottom: 0.5rem;
-}
-.director {
-  opacity: 0.8;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
-}
-.remux-notice {
-  display: block;
-  width: fit-content;
-  margin-bottom: 1rem;
-}
-.tagline {
-  font-style: italic;
-  opacity: 0.7;
-  margin-bottom: 0.75rem;
-}
-.overview {
-  margin-bottom: 1.5rem;
-  max-width: 60ch;
-}
-.actions {
-  display: flex;
-  gap: 0.75rem;
-}
-button.secondary {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-.details-section,
-.media-info-section {
-  margin-top: 2rem;
-}
-.details-grid {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.5rem 1.5rem;
-  margin: 0;
-}
-.details-grid dt {
-  color: var(--text-dim);
-  font-size: 0.85rem;
-}
-.details-grid dd {
-  margin: 0;
-}
-
-.media-info-toggle {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: 0.9rem;
-  padding: 0.5rem 0.9rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.chevron {
-  display: inline-block;
-  transition: transform 0.15s ease;
-  font-size: 0.75rem;
-}
-.chevron.open {
-  transform: rotate(90deg);
-}
-.media-info-body {
-  margin-top: 1rem;
-}
-</style>

@@ -31,14 +31,14 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="actor-detail">
-    <h1>{{ name }}</h1>
-    <div v-if="loading" class="center"><div class="spinner" /></div>
+  <div>
+    <h1 class="mb-5 text-3xl font-black tracking-tight">{{ name }}</h1>
+    <div v-if="loading" class="flex justify-center p-16"><div class="spinner" /></div>
     <template v-else-if="filmography">
-      <section>
-        <h2>Movies</h2>
-        <p v-if="!filmography.movies.length" class="empty">No movies found.</p>
-        <div class="grid">
+      <section class="mb-10">
+        <h2 class="mb-3 text-lg font-black tracking-tight">Movies</h2>
+        <p v-if="!filmography.movies.length" class="text-text-dim">No movies found.</p>
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-5">
           <PosterCard
             v-for="movie in filmography.movies"
             :key="movie.id"
@@ -50,10 +50,10 @@ onMounted(async () => {
           />
         </div>
       </section>
-      <section>
-        <h2>TV Shows</h2>
-        <p v-if="!filmography.tv_shows.length" class="empty">No tv shows found.</p>
-        <div class="grid">
+      <section class="mb-10">
+        <h2 class="mb-3 text-lg font-black tracking-tight">TV Shows</h2>
+        <p v-if="!filmography.tv_shows.length" class="text-text-dim">No tv shows found.</p>
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-5">
           <PosterCard
             v-for="show in filmography.tv_shows"
             :key="show.id"
@@ -67,19 +67,3 @@ onMounted(async () => {
     </template>
   </div>
 </template>
-
-<style scoped>
-section {
-  margin-bottom: 2.5rem;
-}
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1.25rem;
-}
-.center {
-  display: flex;
-  justify-content: center;
-  padding: 4rem;
-}
-</style>

@@ -129,30 +129,31 @@ function playEpisode(id: string, restart: boolean) {
 </script>
 
 <template>
-  <div v-if="show" class="show-detail">
+  <div v-if="show">
     <Breadcrumbs :trail="[{ label: 'TV Shows', to: '/tvshows' }]" :current="show.title" fallback="/tvshows" />
     <div
       v-if="continueWatching"
-      class="continue-watching"
+      class="mb-8 flex cursor-pointer items-center gap-5 rounded-xl border border-border bg-bg-alt p-4 transition-colors hover:bg-bg-elevated"
       @click="playEpisode(continueWatching.episode.id, false)"
     >
       <img
         v-if="continueWatching.episode.still_url"
         :src="continueWatching.episode.still_url"
         :alt="continueWatching.episode.title"
+        class="w-32 shrink-0 rounded-lg sm:w-44"
       />
-      <div class="cw-info">
-        <span class="cw-label">Continue Watching</span>
+      <div class="flex flex-1 flex-col gap-1.5">
+        <span class="text-xs font-bold tracking-wide text-accent uppercase">Continue Watching</span>
         <strong>
           S{{ continueWatching.seasonNumber }}E{{ continueWatching.episode.episode_number }} ·
           {{ continueWatching.episode.title }}
         </strong>
         <div
           v-if="continueWatching.episode.progress && !continueWatching.episode.progress.completed"
-          class="cw-progress-track"
+          class="h-1 w-full max-w-[320px] overflow-hidden rounded-full bg-border"
         >
           <div
-            class="cw-progress-fill"
+            class="h-full bg-accent"
             :style="{
               width:
                 (continueWatching.episode.progress.position_seconds /
@@ -162,23 +163,25 @@ function playEpisode(id: string, restart: boolean) {
             }"
           />
         </div>
-        <button @click.stop="playEpisode(continueWatching.episode.id, false)">
+        <button class="btn-primary mt-1 w-fit" @click.stop="playEpisode(continueWatching.episode.id, false)">
           ▶ {{ playLabel(continueWatching.episode) }}
         </button>
       </div>
     </div>
 
-    <div class="header">
-      <img v-if="posterUrl" :src="posterUrl" :alt="show.title" class="poster" />
-      <div>
-        <h1>{{ show.title }}</h1>
-        <p class="meta">{{ show.first_air_date }} · ⭐ {{ show.vote_average.toFixed(1) }} · {{ show.genres }}</p>
-        <p v-if="show.creators" class="creators">Created by {{ show.creators }}</p>
-        <p>{{ show.overview }}</p>
-        <div class="refresh-actions">
+    <div class="mb-8 flex flex-col gap-6 sm:flex-row sm:gap-8">
+      <img v-if="posterUrl" :src="posterUrl" :alt="show.title" class="w-36 shrink-0 self-start rounded-lg sm:w-52" />
+      <div class="min-w-0">
+        <h1 class="text-2xl font-black tracking-tight sm:text-4xl">{{ show.title }}</h1>
+        <p class="mt-1.5 mb-1 text-text-dim">
+          {{ show.first_air_date }} · ⭐ {{ show.vote_average.toFixed(1) }} · {{ show.genres }}
+        </p>
+        <p v-if="show.creators" class="mb-2 text-sm text-text-dim">Created by {{ show.creators }}</p>
+        <p class="max-w-[70ch]">{{ show.overview }}</p>
+        <div class="mt-3 flex flex-wrap gap-2.5">
           <button
             v-if="auth.isAdmin"
-            class="secondary"
+            class="btn-secondary"
             :disabled="refreshing || replacing"
             title="Re-fetch this show's metadata and cover from TMDB, keeping the same match"
             @click="refreshMetadata"
@@ -187,7 +190,7 @@ function playEpisode(id: string, restart: boolean) {
           </button>
           <button
             v-if="auth.isAdmin"
-            class="secondary"
+            class="btn-secondary"
             :disabled="refreshing || replacing"
             title="Delete and re-discover this show, its seasons, and episodes from scratch (a new TMDB search) — fixes a wrong match"
             @click="replaceMetadata"
@@ -195,178 +198,63 @@ function playEpisode(id: string, restart: boolean) {
             {{ replacing ? 'Rescanning…' : '⟲ Full Rescan' }}
           </button>
         </div>
-        <p v-if="refreshError" class="error-message">{{ refreshError }}</p>
-        <p v-if="replaceError" class="error-message">{{ replaceError }}</p>
+        <p v-if="refreshError" class="mt-3 rounded-lg border border-danger bg-danger/10 px-3.5 py-2.5 text-sm text-danger">
+          {{ refreshError }}
+        </p>
+        <p v-if="replaceError" class="mt-3 rounded-lg border border-danger bg-danger/10 px-3.5 py-2.5 text-sm text-danger">
+          {{ replaceError }}
+        </p>
       </div>
     </div>
 
     <CastList :cast="show.cast" />
 
-    <div v-for="season in show.seasons" :key="season.id" class="season">
-      <h2>Season {{ season.season_number }}</h2>
-      <ul class="episodes">
-        <li v-for="ep in season.episodes" :key="ep.id" :class="{ watched: ep.progress?.completed }">
-          <div class="thumb-wrap" @click="playEpisode(ep.id, !!ep.progress?.completed)">
-            <img v-if="ep.still_url" :src="ep.still_url" :alt="ep.title" />
-            <div v-if="ep.progress?.completed" class="watched-badge" title="Watched">✓</div>
+    <div v-for="season in show.seasons" :key="season.id" class="mt-8">
+      <h2 class="mb-3 text-lg font-black tracking-tight">Season {{ season.season_number }}</h2>
+      <ul class="m-0 flex list-none flex-col gap-3 p-0">
+        <li
+          v-for="ep in season.episodes"
+          :key="ep.id"
+          class="flex items-center gap-4 rounded-lg p-2 hover:bg-white/5"
+          :class="{ 'opacity-60': ep.progress?.completed }"
+        >
+          <div class="relative shrink-0 cursor-pointer" @click="playEpisode(ep.id, !!ep.progress?.completed)">
+            <img
+              v-if="ep.still_url"
+              :src="ep.still_url"
+              :alt="ep.title"
+              class="block h-fit w-36 rounded-md sm:w-40"
+            />
+            <div
+              v-if="ep.progress?.completed"
+              title="Watched"
+              class="absolute top-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[0.85rem] font-bold text-white shadow-[0_1px_4px_rgb(0_0_0/0.5)]"
+            >
+              ✓
+            </div>
           </div>
-          <div class="episode-info" @click="playEpisode(ep.id, !!ep.progress?.completed)">
+          <div class="min-w-0 flex-1 cursor-pointer" @click="playEpisode(ep.id, !!ep.progress?.completed)">
             <strong>{{ ep.episode_number }}. {{ ep.title }}</strong>
-            <span v-if="ep.runtime_minutes" class="runtime">{{ formatRuntime(ep.runtime_minutes) }}</span>
-            <RemuxStatusBadge :status="ep.remux_status" class="remux-notice" />
-            <p>{{ ep.overview }}</p>
+            <span v-if="ep.runtime_minutes" class="ml-2 text-[0.85rem] text-text-dim">{{
+              formatRuntime(ep.runtime_minutes)
+            }}</span>
+            <RemuxStatusBadge :status="ep.remux_status" class="ml-2" />
+            <p class="text-text-dim">{{ ep.overview }}</p>
           </div>
-          <div class="episode-actions">
-            <button @click.stop="playEpisode(ep.id, false)">▶ {{ playLabel(ep) }}</button>
-            <button v-if="ep.progress" class="secondary" @click.stop="playEpisode(ep.id, true)">Start Over</button>
+          <div class="flex shrink-0 flex-col items-end gap-1.5">
+            <button class="btn-primary px-3 py-1.5 text-[0.85rem] whitespace-nowrap" @click.stop="playEpisode(ep.id, false)">
+              ▶ {{ playLabel(ep) }}
+            </button>
+            <button
+              v-if="ep.progress"
+              class="btn-secondary px-3 py-1.5 text-[0.85rem] whitespace-nowrap"
+              @click.stop="playEpisode(ep.id, true)"
+            >
+              Start Over
+            </button>
           </div>
         </li>
       </ul>
     </div>
   </div>
 </template>
-
-<style scoped>
-.continue-watching {
-  display: flex;
-  gap: 1.25rem;
-  align-items: center;
-  padding: 1rem;
-  margin-bottom: 2rem;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-}
-.continue-watching img {
-  width: 180px;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-.cw-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  flex: 1;
-}
-.cw-label {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--accent);
-  font-weight: 600;
-}
-.cw-progress-track {
-  width: 100%;
-  max-width: 320px;
-  height: 4px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.cw-progress-fill {
-  height: 100%;
-  background: var(--accent);
-}
-.continue-watching button {
-  align-self: flex-start;
-  margin-top: 0.25rem;
-}
-.header {
-  display: flex;
-  gap: 2rem;
-  margin-bottom: 2rem;
-}
-.creators {
-  opacity: 0.8;
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
-}
-.refresh-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-.poster {
-  width: 200px;
-  border-radius: 6px;
-}
-.season {
-  margin-bottom: 2rem;
-}
-.episodes {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-.episodes li {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.5rem;
-  border-radius: 6px;
-}
-.episodes li:hover {
-  background: rgba(127, 127, 127, 0.15);
-}
-.episodes li.watched {
-  opacity: 0.6;
-}
-.thumb-wrap {
-  position: relative;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.episodes img {
-  width: 160px;
-  border-radius: 4px;
-  height: fit-content;
-  display: block;
-}
-.watched-badge {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.85rem;
-  font-weight: 700;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
-}
-.episode-info {
-  flex: 1;
-  cursor: pointer;
-}
-.runtime {
-  color: var(--text-dim);
-  font-size: 0.85rem;
-  margin-left: 0.5rem;
-}
-.remux-notice {
-  margin-left: 0.5rem;
-}
-.episode-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  align-items: flex-end;
-}
-.episode-actions button {
-  white-space: nowrap;
-  font-size: 0.85rem;
-  padding: 0.4rem 0.7rem;
-}
-button.secondary {
-  background: transparent;
-  color: inherit;
-  border: 1px solid var(--border);
-}
-</style>

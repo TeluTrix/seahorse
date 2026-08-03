@@ -79,6 +79,9 @@ func main() {
 	apiRouter.Handle("/subtitles/episodes/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.EpisodeSubtitles))).Methods("GET")
 	apiRouter.Handle("/subtitles/episodes/{id}/vtt", authenticator.RequireAuth(http.HandlerFunc(handlers.EpisodeSubtitleVTT))).Methods("GET")
 
+	apiRouter.Handle("/audio/movies/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.MovieAudioTracks))).Methods("GET")
+	apiRouter.Handle("/audio/episodes/{id}", authenticator.RequireAuth(http.HandlerFunc(handlers.EpisodeAudioTracks))).Methods("GET")
+
 	apiRouter.Handle("/progress", authenticator.RequireAuth(http.HandlerFunc(handlers.SaveProgress))).Methods("PUT")
 	apiRouter.Handle("/progress/{mediaType}/{mediaId}", authenticator.RequireAuth(http.HandlerFunc(handlers.GetProgress))).Methods("GET")
 

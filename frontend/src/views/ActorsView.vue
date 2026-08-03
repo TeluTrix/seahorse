@@ -55,99 +55,47 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="actors-view">
-    <h1>Actors</h1>
-    <form class="filters" @submit.prevent="handleSubmit">
-      <input v-model="q" type="text" placeholder="Search actors..." class="q-input" />
-      <button type="submit">Search</button>
+  <div>
+    <h1 class="mb-5 text-3xl font-black tracking-tight">Actors</h1>
+    <form class="mb-8 flex flex-wrap items-center gap-3" @submit.prevent="handleSubmit">
+      <input v-model="q" type="text" placeholder="Search actors..." class="field w-auto min-w-[220px]" />
+      <button type="submit" class="btn-primary">Search</button>
     </form>
 
-    <div v-if="loading" class="center"><div class="spinner" /></div>
+    <div v-if="loading" class="flex justify-center p-16"><div class="spinner" /></div>
     <template v-else>
-      <p v-if="!actors.length" class="empty">No matching actors.</p>
-      <div class="grid">
+      <p v-if="!actors.length" class="text-text-dim">No matching actors.</p>
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-6">
         <div
           v-for="actor in actors"
           :key="actor.name"
-          class="actor-card"
+          class="cursor-pointer text-center transition-transform duration-200 ease-out hover:scale-[1.04]"
           @click="router.push({ name: 'actor', params: { name: actor.name } })"
         >
-          <div class="headshot-wrap">
-            <img v-if="actor.profile_url" :src="actor.profile_url" :alt="actor.name" />
-            <div v-else class="headshot-placeholder">{{ actor.name.charAt(0) }}</div>
+          <div class="mx-auto mb-2.5 h-[120px] w-[120px] overflow-hidden rounded-full bg-bg-alt ring-1 ring-white/10">
+            <img
+              v-if="actor.profile_url"
+              :src="actor.profile_url"
+              :alt="actor.name"
+              class="block h-full w-full object-cover"
+            />
+            <div v-else class="flex h-full w-full items-center justify-center text-[2.2rem] font-bold opacity-50">
+              {{ actor.name.charAt(0) }}
+            </div>
           </div>
-          <div class="actor-name">{{ actor.name }}</div>
-          <div class="actor-credits">{{ actor.credits }} title{{ actor.credits === 1 ? '' : 's' }}</div>
+          <div class="overflow-hidden text-ellipsis whitespace-nowrap text-[0.92rem] font-bold">
+            {{ actor.name }}
+          </div>
+          <div class="text-[0.8rem] text-text-dim">
+            {{ actor.credits }} title{{ actor.credits === 1 ? '' : 's' }}
+          </div>
         </div>
       </div>
-      <div v-if="maxPages() > 1" class="pagination">
-        <button class="secondary" :disabled="page <= 1" @click="goToPage(page - 1)">Prev</button>
-        <span class="page-indicator">Page {{ page }} of {{ maxPages() }}</span>
-        <button class="secondary" :disabled="page >= maxPages()" @click="goToPage(page + 1)">Next</button>
+      <div v-if="maxPages() > 1" class="mt-4 flex items-center gap-4">
+        <button class="btn-secondary" :disabled="page <= 1" @click="goToPage(page - 1)">Prev</button>
+        <span class="text-sm text-text-dim">Page {{ page }} of {{ maxPages() }}</span>
+        <button class="btn-secondary" :disabled="page >= maxPages()" @click="goToPage(page + 1)">Next</button>
       </div>
     </template>
   </div>
 </template>
-
-<style scoped>
-.filters {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 2rem;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.filters input {
-  width: auto;
-  min-width: 220px;
-}
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 1.5rem;
-}
-.actor-card {
-  text-align: center;
-  cursor: pointer;
-}
-.headshot-wrap {
-  width: 120px;
-  height: 120px;
-  margin: 0 auto 0.6rem;
-  border-radius: 50%;
-  overflow: hidden;
-  background: var(--bg-alt);
-}
-.headshot-wrap img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.headshot-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2.2rem;
-  font-weight: 600;
-  opacity: 0.5;
-}
-.actor-name {
-  font-weight: 600;
-  font-size: 0.92rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.actor-credits {
-  font-size: 0.8rem;
-  opacity: 0.6;
-}
-.center {
-  display: flex;
-  justify-content: center;
-  padding: 4rem;
-}
-</style>

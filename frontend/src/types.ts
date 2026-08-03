@@ -194,3 +194,8 @@ export interface SubtitleTrack {
   language: string
   source: SubtitleSource
 }
+
+export interface AudioTrack {
+  id: string
+  language: string
+}

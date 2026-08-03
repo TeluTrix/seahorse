@@ -88,89 +88,57 @@ async function savePassword(userId: string) {
 </script>
 
 <template>
-  <div class="admin">
-    <h1>Users</h1>
+  <div class="flex flex-col gap-4">
+    <h1 class="text-3xl font-black tracking-tight">Users</h1>
 
     <div v-if="!showCreateForm">
-      <button @click="startCreate">+ Create user</button>
+      <button class="btn-primary" @click="startCreate">+ Create user</button>
     </div>
-    <form v-else class="create-form" @submit.prevent="createUser">
-      <input v-model="newUserEmail" type="email" placeholder="Email" required autocomplete="off" />
-      <input v-model="newUserPassword" type="password" placeholder="Password (min. 8 characters)" required />
-      <select v-model="newUserRole">
+    <form v-else class="flex flex-wrap items-center gap-2" @submit.prevent="createUser">
+      <input v-model="newUserEmail" type="email" placeholder="Email" required autocomplete="off" class="field w-[220px]" />
+      <input v-model="newUserPassword" type="password" placeholder="Password (min. 8 characters)" required class="field w-auto" />
+      <select v-model="newUserRole" class="field w-auto cursor-pointer">
         <option value="user">User</option>
         <option value="admin">Admin</option>
       </select>
-      <button type="submit" :disabled="creating">{{ creating ? 'Creating…' : 'Create' }}</button>
-      <button type="button" class="secondary" @click="cancelCreate">Cancel</button>
+      <button type="submit" :disabled="creating" class="btn-primary">{{ creating ? 'Creating…' : 'Create' }}</button>
+      <button type="button" class="btn-secondary" @click="cancelCreate">Cancel</button>
     </form>
-    <p v-if="createError" class="error-message">{{ createError }}</p>
+    <p v-if="createError" class="rounded-lg border border-danger bg-danger/10 px-3.5 py-2.5 text-sm text-danger">
+      {{ createError }}
+    </p>
 
     <div v-if="loading" class="spinner" />
-    <table v-else class="users-table">
+    <table v-else class="w-full border-collapse">
       <thead>
         <tr>
-          <th>Email</th>
-          <th>Role</th>
-          <th></th>
+          <th class="border-b border-border px-3 py-2.5 text-left">Email</th>
+          <th class="border-b border-border px-3 py-2.5 text-left">Role</th>
+          <th class="border-b border-border px-3 py-2.5 text-left"></th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="u in users" :key="u.user_id">
-          <td>{{ u.user_email }}</td>
-          <td>{{ u.user_role }}</td>
-          <td class="edit-cell">
-            <template v-if="editingId === u.user_id">
-              <input v-model="newPassword" type="password" placeholder="New password" />
-              <button @click="savePassword(u.user_id)">Save</button>
-              <button class="secondary" @click="cancelEdit">Cancel</button>
-            </template>
-            <template v-else>
-              <span v-if="successId === u.user_id" class="success">Password updated</span>
-              <button class="secondary" @click="startEdit(u.user_id)">Change password</button>
-            </template>
-            <p v-if="errors[u.user_id]" class="error-message">{{ errors[u.user_id] }}</p>
+          <td class="border-b border-border px-3 py-2.5">{{ u.user_email }}</td>
+          <td class="border-b border-border px-3 py-2.5">{{ u.user_role }}</td>
+          <td class="border-b border-border px-3 py-2.5">
+            <div class="flex items-center gap-2">
+              <template v-if="editingId === u.user_id">
+                <input v-model="newPassword" type="password" placeholder="New password" class="field w-[180px]" />
+                <button class="btn-primary" @click="savePassword(u.user_id)">Save</button>
+                <button class="btn-secondary" @click="cancelEdit">Cancel</button>
+              </template>
+              <template v-else>
+                <span v-if="successId === u.user_id" class="text-[0.85rem] text-accent2">Password updated</span>
+                <button class="btn-secondary" @click="startEdit(u.user_id)">Change password</button>
+              </template>
+            </div>
+            <p v-if="errors[u.user_id]" class="mt-2 rounded-lg border border-danger bg-danger/10 px-3.5 py-2 text-sm text-danger">
+              {{ errors[u.user_id] }}
+            </p>
           </td>
         </tr>
       </tbody>
     </table>
   </div>
 </template>
-
-<style scoped>
-.admin {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-.create-form {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.create-form input {
-  width: 220px;
-}
-.users-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.users-table th,
-.users-table td {
-  text-align: left;
-  padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid var(--border);
-}
-.edit-cell {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.edit-cell input {
-  width: 180px;
-}
-.success {
-  color: var(--accent);
-  font-size: 0.85rem;
-}
-</style>

@@ -35,83 +35,40 @@ onBeforeUnmount(() => eventSource?.close())
 </script>
 
 <template>
-  <div class="admin">
-    <h1>Library</h1>
-    <div class="actions">
-      <button :disabled="status?.state === 'running'" @click="startScan(false)">
+  <div class="flex max-w-[520px] flex-col items-start gap-4">
+    <h1 class="text-3xl font-black tracking-tight">Library</h1>
+    <div class="flex gap-3">
+      <button class="btn-primary" :disabled="status?.state === 'running'" @click="startScan(false)">
         {{ status?.state === 'running' ? 'Scanning…' : 'Scan Library' }}
       </button>
-      <button class="secondary" :disabled="status?.state === 'running'" @click="startScan(true)">
+      <button class="btn-secondary" :disabled="status?.state === 'running'" @click="startScan(true)">
         Full Rescan
       </button>
     </div>
-    <p class="hint">
+    <p class="text-sm text-text-dim">
       "Scan Library" only adds new movies/shows/episodes. "Full Rescan" wipes all cached covers and metadata and
       re-fetches everything from TMDB.
     </p>
-    <p v-if="error" class="error-message">{{ error }}</p>
-    <div v-if="status" class="status">
+    <p v-if="error" class="rounded-lg border border-danger bg-danger/10 px-3.5 py-2.5 text-sm text-danger">{{ error }}</p>
+    <div v-if="status" class="w-full">
       <p>Status: <strong>{{ status.state }}</strong></p>
       <p v-if="status.state === 'running' && status.current_item">Scanning: {{ status.current_item }}</p>
       <p v-if="status.state === 'running' || status.state === 'done'">
         Found {{ status.movies_found }} movies, {{ status.shows_found }} shows,
         {{ status.episodes_found }} episodes{{ status.state === 'running' ? ' so far…' : '.' }}
       </p>
-      <div v-for="job in status.remux_jobs" :key="job.file" class="remux-job">
-        <div class="remux-file">Remuxing audio: {{ job.file }}</div>
-        <div class="remux-track">
-          <div class="remux-fill" :style="{ width: job.percent + '%' }" />
+      <div v-for="job in status.remux_jobs" :key="job.file" class="mt-1 w-full">
+        <div class="mb-1 overflow-hidden text-ellipsis whitespace-nowrap text-[0.85rem] text-text-dim">
+          Remuxing audio: {{ job.file }}
         </div>
-        <div class="remux-percent">{{ Math.round(job.percent) }}%</div>
+        <div class="h-2 w-full overflow-hidden rounded-full bg-border">
+          <div class="h-full bg-accent transition-[width] duration-300 ease-out" :style="{ width: job.percent + '%' }" />
+        </div>
+        <div class="mt-0.5 text-[0.8rem] text-text-dim">{{ Math.round(job.percent) }}%</div>
       </div>
-      <p v-if="status.state === 'error'" class="error-message">{{ status.error }}</p>
+      <p v-if="status.state === 'error'" class="mt-2 rounded-lg border border-danger bg-danger/10 px-3.5 py-2.5 text-sm text-danger">
+        {{ status.error }}
+      </p>
     </div>
   </div>
 </template>
-
-<style scoped>
-.admin {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1rem;
-  max-width: 520px;
-}
-.actions {
-  display: flex;
-  gap: 0.75rem;
-}
-.hint {
-  color: var(--text-dim);
-  font-size: 0.9rem;
-}
-.remux-job {
-  width: 100%;
-  margin-top: 0.25rem;
-}
-.remux-file {
-  font-size: 0.85rem;
-  color: var(--text-dim);
-  margin-bottom: 0.3rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.remux-track {
-  width: 100%;
-  height: 8px;
-  background: var(--border);
-  border-radius: 4px;
-  overflow: hidden;
-}
-.remux-fill {
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
-}
-.remux-percent {
-  font-size: 0.8rem;
-  color: var(--text-dim);
-  margin-top: 0.2rem;
-}
-</style>

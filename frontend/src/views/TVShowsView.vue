@@ -69,22 +69,22 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="tvshows-view">
-    <h1>TV Shows</h1>
-    <form class="filters" @submit.prevent="handleSubmit">
-      <input v-model="q" type="text" placeholder="Search by title..." class="q-input" />
-      <input v-model="year" type="text" placeholder="Year" maxlength="4" class="year-input" />
-      <select v-model="genre">
+  <div>
+    <h1 class="mb-5 text-3xl font-black tracking-tight">TV Shows</h1>
+    <form class="mb-8 flex flex-wrap items-center gap-3" @submit.prevent="handleSubmit">
+      <input v-model="q" type="text" placeholder="Search by title..." class="field w-auto min-w-[220px]" />
+      <input v-model="year" type="text" placeholder="Year" maxlength="4" class="field w-[100px]" />
+      <select v-model="genre" class="field w-auto cursor-pointer">
         <option value="">All genres</option>
         <option v-for="g in genres" :key="g" :value="g">{{ g }}</option>
       </select>
-      <button type="submit">Search</button>
+      <button type="submit" class="btn-primary">Search</button>
     </form>
 
-    <div v-if="loading" class="center"><div class="spinner" /></div>
+    <div v-if="loading" class="flex justify-center p-16"><div class="spinner" /></div>
     <template v-else>
-      <p v-if="!shows.length" class="empty">No matching tv shows.</p>
-      <div class="grid">
+      <p v-if="!shows.length" class="text-text-dim">No matching tv shows.</p>
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-5">
         <PosterCard
           v-for="show in shows"
           :key="show.id"
@@ -94,41 +94,11 @@ onMounted(async () => {
           @click="router.push({ name: 'tvshow', params: { id: show.id } })"
         />
       </div>
-      <div v-if="maxPages() > 1" class="pagination">
-        <button class="secondary" :disabled="page <= 1" @click="goToPage(page - 1)">Prev</button>
-        <span class="page-indicator">Page {{ page }} of {{ maxPages() }}</span>
-        <button class="secondary" :disabled="page >= maxPages()" @click="goToPage(page + 1)">Next</button>
+      <div v-if="maxPages() > 1" class="mt-4 flex items-center gap-4">
+        <button class="btn-secondary" :disabled="page <= 1" @click="goToPage(page - 1)">Prev</button>
+        <span class="text-sm text-text-dim">Page {{ page }} of {{ maxPages() }}</span>
+        <button class="btn-secondary" :disabled="page >= maxPages()" @click="goToPage(page + 1)">Next</button>
       </div>
     </template>
   </div>
 </template>
-
-<style scoped>
-.filters {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 2rem;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.filters input,
-.filters select {
-  width: auto;
-}
-.q-input {
-  min-width: 220px;
-}
-.year-input {
-  width: 100px !important;
-}
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1.25rem;
-}
-.center {
-  display: flex;
-  justify-content: center;
-  padding: 4rem;
-}
-</style>

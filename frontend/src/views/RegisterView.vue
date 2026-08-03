@@ -26,31 +26,32 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="auth-form">
-    <h1>Create account</h1>
-    <form @submit.prevent="handleSubmit">
-      <label for="email">Email</label>
-      <input id="email" v-model="email" type="email" autocomplete="email" required />
-      <label for="password">Password (min. 8 characters)</label>
-      <input id="password" v-model="password" type="password" autocomplete="new-password" required minlength="8" />
-      <p v-if="error" class="error-message">{{ error }}</p>
-      <button type="submit" :disabled="loading">{{ loading ? 'Registering…' : 'Register' }}</button>
+  <div
+    class="mx-auto mt-16 flex max-w-[380px] flex-col gap-6 rounded-2xl border border-white/10 bg-bg-alt p-8 shadow-[0_20px_60px_rgb(0_0_0/0.4)]"
+  >
+    <h1 class="text-3xl font-black tracking-tight">Create account</h1>
+    <form class="flex flex-col gap-3" @submit.prevent="handleSubmit">
+      <label for="email" class="text-sm text-text-dim">Email</label>
+      <input id="email" v-model="email" type="email" autocomplete="email" required class="field" />
+      <label for="password" class="text-sm text-text-dim">Password (min. 8 characters)</label>
+      <input
+        id="password"
+        v-model="password"
+        type="password"
+        autocomplete="new-password"
+        required
+        minlength="8"
+        class="field"
+      />
+      <p v-if="error" class="rounded-lg border border-danger bg-danger/10 px-3.5 py-2.5 text-sm text-danger">
+        {{ error }}
+      </p>
+      <button type="submit" :disabled="loading" class="btn-primary mt-1">
+        {{ loading ? 'Registering…' : 'Register' }}
+      </button>
     </form>
-    <p>Already have an account? <RouterLink to="/login">Log in</RouterLink></p>
+    <p class="text-sm text-text-dim">
+      Already have an account? <RouterLink to="/login" class="font-semibold text-accent2 hover:underline">Log in</RouterLink>
+    </p>
   </div>
 </template>
-
-<style scoped>
-.auth-form {
-  max-width: 360px;
-  margin: 4rem auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-.auth-form form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-</style>

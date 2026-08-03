@@ -178,6 +178,13 @@ func (s *Scanner) TMDBClient() *tmdb.Client {
 	return s.tmdb
 }
 
+// TranscodeOptions exposes the scanner's configured transcode options for
+// one-off use outside a full scan, e.g. lazily preparing a specific audio
+// track when it's first requested for streaming.
+func (s *Scanner) TranscodeOptions() transcode.Options {
+	return s.transcodeOpts
+}
+
 // processBacklog runs every remux job queued via queueRemux since the last
 // call, bounded by remuxSlots, and blocks until they've all finished.
 // Errors are logged, not returned, matching the previous inline behavior

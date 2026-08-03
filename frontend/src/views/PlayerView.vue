@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, streamURL, subtitleURL, TOKEN_KEY } from '../api/client'
 import Breadcrumbs from '../components/Breadcrumbs.vue'
 import { useConfigStore } from '../stores/config'
 import type { Episode, MediaType, NextEpisode, SubtitleTrack } from '../types'
+import { formatLanguage } from '../utils/format'
 
 const config = useConfigStore()
 const route = useRoute()
@@ -21,7 +22,9 @@ const mediaType: MediaType = route.name === 'watch-movie' ? 'movie' : 'episode'
 const mediaId = route.params.id as string
 const restart = route.query.restart === '1'
 
-const src = streamURL(kind, mediaId)
+// Reactive (not a plain const) because switching audio tracks means
+// reloading against a different URL — see selectAudioTrack below.
+const src = ref(streamURL(kind, mediaId))
 const tracks = ref<SubtitleTrack[]>([])
 
 const videoEl = ref<HTMLVideoElement | null>(null)
@@ -124,6 +127,18 @@ function applyResumeIfReady() {
 }
 
 function onLoadedMetadata() {
+  // A pending audio-track switch takes priority over the ordinary saved-
+  // progress resume: it means this loadedmetadata firing is for a source
+  // reloaded mid-playback (see selectAudioTrack), so the position to
+  // restore is wherever the viewer just was, not the original watch
+  // progress from whenever this page first mounted.
+  const video = videoEl.value
+  if (video && pendingAudioSeek.value) {
+    video.currentTime = pendingAudioSeek.value.time
+    if (pendingAudioSeek.value.resume) video.play()
+    pendingAudioSeek.value = null
+    return
+  }
   applyResumeIfReady()
 }
 
@@ -172,6 +187,60 @@ function onTextTracksChange() {
   } else {
     localStorage.removeItem(SUBTITLE_LANG_KEY)
   }
+}
+
+// Audio language is remembered per-browser (not per-item), the exact same
+// mechanism as SUBTITLE_LANG_KEY above — whichever language was last
+// selected carries forward into the next thing played automatically, with
+// no special handling needed in playNext().
+//
+// Unlike subtitles, there's no native browser menu for picking an audio
+// track (every major browser shows one for subtitles; none do for audio),
+// hence the small custom picker in the template. There's also no way to
+// switch which audio stream plays out of a single already-loaded file:
+// HTMLMediaElement.audioTracks/videoTracks are unimplemented in mainstream
+// Chrome and Firefox despite being spec'd (confirmed empirically against a
+// real, current Chromium build, not just assumed) — so "pick a language"
+// here means swapping the <video>'s src to ask the server for that specific
+// track (see streamURL's optional track argument and
+// internal/transcode.EnsureAudioTrack), not a client-side track switch.
+const AUDIO_LANG_KEY = 'seahorse_audio_lang'
+
+interface AudioTrackOption {
+  id: string
+  label: string
+  language: string
+}
+
+const audioTracks = ref<AudioTrackOption[]>([])
+const audioMenuOpen = ref(false)
+const selectedAudioTrackId = ref('')
+const selectedAudioLabel = computed(
+  () => audioTracks.value.find((t) => t.id === selectedAudioTrackId.value)?.label ?? '',
+)
+
+// Set by selectAudioTrack() right before it swaps `src` to reload against a
+// different track — captures where playback was so onLoadedMetadata can
+// restore it once the new source's metadata is ready, instead of restarting
+// from 0. Left null the rest of the time, so the ordinary
+// applyResumeIfReady() flow runs unobstructed (including right after the
+// very first load, when a saved preference resolves to a non-default track
+// — see onMounted below; there's no prior position to preserve at that
+// point, just the normal saved watch-progress resume to fall back to).
+const pendingAudioSeek = ref<{ time: number; resume: boolean } | null>(null)
+
+function selectAudioTrack(id: string) {
+  audioMenuOpen.value = false
+  if (id === selectedAudioTrackId.value) return
+  const track = audioTracks.value.find((t) => t.id === id)
+  if (!track) return
+  const video = videoEl.value
+  if (video) {
+    pendingAudioSeek.value = { time: video.currentTime, resume: !video.paused }
+  }
+  selectedAudioTrackId.value = id
+  localStorage.setItem(AUDIO_LANG_KEY, track.language)
+  src.value = streamURL(kind, mediaId, id)
 }
 
 // Surfaces the "Watch Next" overlay once playback enters the last
@@ -247,6 +316,20 @@ onMounted(async () => {
   videoEl.value?.textTracks.addEventListener('change', onTextTracksChange)
   applySubtitlePreference()
 
+  // Only bother resolving a specific audio track (and reloading against it)
+  // when there's actually more than one to choose from — for the
+  // overwhelmingly common case of a file with zero or one audio stream,
+  // `src` never changes from its initial value and playback starts exactly
+  // as it did before this feature existed.
+  const rawAudioTracks = await api.listAudioTracks(kind, mediaId).catch(() => [])
+  if (rawAudioTracks.length > 1) {
+    audioTracks.value = rawAudioTracks.map((t) => ({ id: t.id, language: t.language, label: formatLanguage(t.language) }))
+    const preferred = localStorage.getItem(AUDIO_LANG_KEY)
+    const match = audioTracks.value.find((t) => t.language === preferred)
+    selectedAudioTrackId.value = (match ?? audioTracks.value[0]).id
+    src.value = streamURL(kind, mediaId, selectedAudioTrackId.value)
+  }
+
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('beforeunload', reportOnUnload)
   window.addEventListener('keydown', handleKeydown)
@@ -295,17 +378,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="player-page">
+  <div class="flex flex-col gap-4">
     <Breadcrumbs v-if="trail.length" :trail="trail" :current="currentTitle" :fallback="fallback" />
 
-    <div class="player">
-      <div class="video-wrap">
+    <div class="flex flex-col items-center gap-3">
+      <div class="relative w-full">
         <video
           ref="videoEl"
           :src="src"
           controls
           autoplay
-          class="video"
+          class="block max-h-[80vh] w-full bg-black"
           @loadedmetadata="onLoadedMetadata"
           @timeupdate="onTimeUpdate"
           @pause="onPause"
@@ -321,45 +404,95 @@ onBeforeUnmount(() => {
           />
         </video>
 
-        <div v-if="showNextPrompt && nextEpisode" class="next-overlay">
-          <button class="next-overlay-dismiss" title="Dismiss" @click="dismissNextPrompt">✕</button>
+        <!-- No browser shows a native menu for picking an audio track the
+             way every browser does for subtitles, so this is a small custom
+             control — only shown when there's actually a choice to make. -->
+        <div v-if="audioTracks.length > 1" class="absolute top-3.5 right-3.5">
+          <button
+            class="rounded-md border border-white/15 bg-black/75 px-3 py-1.5 text-[0.82rem] font-semibold text-white"
+            @click="audioMenuOpen = !audioMenuOpen"
+          >
+            🔊 {{ selectedAudioLabel || 'Audio' }} ▾
+          </button>
+          <ul
+            v-if="audioMenuOpen"
+            class="absolute top-[calc(100%+0.4rem)] right-0 m-0 min-w-[140px] rounded-lg border border-white/12 bg-black/95 p-1.5 shadow-[0_8px_24px_rgb(0_0_0/0.4)]"
+          >
+            <li v-for="track in audioTracks" :key="track.id">
+              <button
+                class="block w-full rounded px-2.5 py-1.5 text-left text-[0.85rem] font-normal text-white hover:bg-white/10"
+                @click="selectAudioTrack(track.id)"
+              >
+                {{ track.label }}
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <div
+          v-if="showNextPrompt && nextEpisode"
+          class="next-overlay-in absolute right-5 bottom-18 flex max-w-[360px] gap-3.5 rounded-xl border border-white/12 bg-black/92 p-4 shadow-[0_8px_24px_rgb(0_0_0/0.4)]"
+        >
+          <button
+            title="Dismiss"
+            class="absolute top-1.5 right-2 bg-transparent p-0.5 text-[0.9rem] leading-none text-white/60 hover:text-white"
+            @click="dismissNextPrompt"
+          >
+            ✕
+          </button>
           <img
             v-if="nextEpisode.still_url"
             :src="nextEpisode.still_url"
             :alt="nextEpisode.title"
-            class="next-overlay-thumb"
+            class="h-fit w-24 shrink-0 rounded-md"
           />
-          <div class="next-overlay-info">
-            <span class="next-overlay-label">Up Next</span>
-            <strong>S{{ nextEpisode.season_number }}E{{ nextEpisode.episode_number }} · {{ nextEpisode.title }}</strong>
-            <button @click="playNext">▶ Play Next</button>
+          <div class="flex min-w-0 flex-col gap-1.5 text-white">
+            <span class="text-xs font-bold tracking-wide text-accent uppercase">Up Next</span>
+            <strong class="line-clamp-2 overflow-hidden text-[0.88rem]"
+              >S{{ nextEpisode.season_number }}E{{ nextEpisode.episode_number }} · {{ nextEpisode.title }}</strong
+            >
+            <button class="btn-primary mt-0.5 w-fit px-3 py-1.5 text-[0.82rem]" @click="playNext">▶ Play Next</button>
           </div>
         </div>
       </div>
 
-      <div v-if="nextEpisode" class="next-below">
+      <div
+        v-if="nextEpisode"
+        class="flex w-full items-center justify-between gap-4 rounded-lg border border-border bg-bg-alt px-4 py-3 text-sm"
+      >
         <span>Up next: S{{ nextEpisode.season_number }}E{{ nextEpisode.episode_number }} · {{ nextEpisode.title }}</span>
-        <button class="secondary" @click="playNext">Watch Next ▶</button>
+        <button class="btn-secondary" @click="playNext">Watch Next ▶</button>
       </div>
     </div>
 
-    <p v-if="overview" class="synopsis">{{ overview }}</p>
+    <p v-if="overview" class="max-w-[70ch] leading-relaxed text-text-dim">{{ overview }}</p>
 
-    <section v-if="seasonEpisodes.length" class="season-episodes">
-      <h2>This Season</h2>
-      <div class="episode-strip">
+    <section v-if="seasonEpisodes.length">
+      <h2 class="mb-3 text-[1.05rem] font-black tracking-tight">This Season</h2>
+      <div class="flex gap-3.5 overflow-x-auto pb-2">
         <button
           v-for="ep in seasonEpisodes"
           :key="ep.id"
-          class="episode-card"
-          :class="{ current: ep.id === mediaId, watched: ep.progress?.completed }"
+          class="flex w-44 shrink-0 flex-col gap-1.5 border-none bg-transparent p-0 text-left"
+          :class="ep.id === mediaId ? 'cursor-default opacity-100' : 'cursor-pointer opacity-85 hover:opacity-100'"
           @click="ep.id !== mediaId && playEpisode(ep.id, false)"
         >
-          <div class="episode-thumb-wrap">
-            <img v-if="ep.still_url" :src="ep.still_url" :alt="ep.title" class="episode-thumb" />
-            <span v-if="ep.progress?.completed" class="episode-watched-badge">✓</span>
+          <div
+            class="relative aspect-video overflow-hidden rounded-md bg-bg-alt"
+            :class="{ 'outline-2 outline-accent': ep.id === mediaId }"
+          >
+            <img v-if="ep.still_url" :src="ep.still_url" :alt="ep.title" class="block h-full w-full object-cover" />
+            <span
+              v-if="ep.progress?.completed"
+              class="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[0.7rem] text-white"
+              >✓</span
+            >
           </div>
-          <span class="episode-card-title">E{{ ep.episode_number }} · {{ ep.title }}</span>
+          <span
+            class="line-clamp-2 overflow-hidden text-[0.82rem]"
+            :class="ep.progress?.completed ? 'text-text-dim' : 'text-text'"
+            >E{{ ep.episode_number }} · {{ ep.title }}</span
+          >
         </button>
       </div>
     </section>
@@ -367,40 +500,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.player-page {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-.player {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-}
-.video-wrap {
-  position: relative;
-  width: 100%;
-}
-.video {
-  width: 100%;
-  max-height: 80vh;
-  background: #000;
-  display: block;
-}
-
-.next-overlay {
-  position: absolute;
-  right: 1.25rem;
-  bottom: 4.5rem;
-  display: flex;
-  gap: 0.85rem;
-  background: rgba(17, 18, 24, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
-  max-width: 360px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+/* Tailwind has no built-in "slide up + fade in" utility combo tied to a
+   single custom keyframe, so this one animation stays as plain CSS rather
+   than composing several arbitrary-value utilities. */
+.next-overlay-in {
   animation: next-overlay-in 0.25s ease;
 }
 @keyframes next-overlay-in {
@@ -412,145 +515,5 @@ onBeforeUnmount(() => {
     opacity: 1;
     transform: translateY(0);
   }
-}
-.next-overlay-dismiss {
-  position: absolute;
-  top: 0.4rem;
-  right: 0.5rem;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.6);
-  border: none;
-  padding: 0.2rem;
-  font-size: 0.9rem;
-  line-height: 1;
-}
-.next-overlay-dismiss:hover {
-  color: #fff;
-}
-.next-overlay-thumb {
-  width: 96px;
-  border-radius: 6px;
-  flex-shrink: 0;
-  height: fit-content;
-}
-.next-overlay-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  color: #fff;
-  min-width: 0;
-}
-.next-overlay-label {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--accent);
-  font-weight: 600;
-}
-.next-overlay-info strong {
-  font-size: 0.88rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.next-overlay-info button {
-  align-self: flex-start;
-  font-size: 0.82rem;
-  padding: 0.4rem 0.75rem;
-  margin-top: 0.1rem;
-}
-
-.next-below {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 0.9rem;
-}
-
-.synopsis {
-  max-width: 70ch;
-  color: var(--text-dim);
-  line-height: 1.5;
-}
-
-.season-episodes h2 {
-  font-size: 1.05rem;
-  margin-bottom: 0.75rem;
-}
-.episode-strip {
-  display: flex;
-  gap: 0.9rem;
-  overflow-x: auto;
-  padding-bottom: 0.5rem;
-}
-.episode-card {
-  flex: 0 0 auto;
-  width: 180px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  background: transparent;
-  border: none;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-  opacity: 0.85;
-}
-.episode-card:hover {
-  opacity: 1;
-}
-.episode-card.current {
-  opacity: 1;
-  cursor: default;
-}
-.episode-thumb-wrap {
-  position: relative;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--bg-alt);
-  aspect-ratio: 16 / 9;
-}
-.episode-card.current .episode-thumb-wrap {
-  outline: 2px solid var(--accent);
-}
-.episode-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.episode-watched-badge {
-  position: absolute;
-  top: 0.35rem;
-  right: 0.35rem;
-  background: var(--accent);
-  color: #fff;
-  border-radius: 50%;
-  width: 1.2rem;
-  height: 1.2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7rem;
-}
-.episode-card-title {
-  font-size: 0.82rem;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.episode-card.watched .episode-card-title {
-  color: var(--text-dim);
 }
 </style>

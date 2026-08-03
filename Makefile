@@ -29,7 +29,19 @@ build: frontend
 # build-linux-% pattern rule) because the GNU Make 3.81 that ships with macOS
 # has a long-standing bug where a target that's both .PHONY and matched only
 # via a pattern rule silently no-ops instead of running its recipe.
+#
+# Both start with a Docker reachability check: `docker info`/`docker run`
+# hang indefinitely (not a quick error) when Docker Desktop isn't running, so
+# without this a plain `make build-all` would just sit there forever with no
+# clue why. Races `docker info` against a 5s watchdog rather than using
+# `timeout`/`gtimeout`, since neither is guaranteed present on macOS.
 build-linux-amd64: frontend
+	@docker info >/dev/null 2>&1 & pid=$$!; \
+	( sleep 5; kill -9 $$pid ) >/dev/null 2>&1 & watchdog=$$!; \
+	if wait $$pid 2>/dev/null; then kill $$watchdog >/dev/null 2>&1; else \
+		echo "Docker doesn't seem to be running (no response after 5s) -- start Docker Desktop and try again." >&2; \
+		exit 1; \
+	fi
 	docker run --rm --platform linux/amd64 \
 		-v "$(CURDIR)":/src -w /src \
 		golang:1.26-alpine \
@@ -39,6 +51,12 @@ build-linux-amd64: frontend
 			-o bin/seahorse-linux-amd64 ./cmd/seahorse"
 
 build-linux-arm64: frontend
+	@docker info >/dev/null 2>&1 & pid=$$!; \
+	( sleep 5; kill -9 $$pid ) >/dev/null 2>&1 & watchdog=$$!; \
+	if wait $$pid 2>/dev/null; then kill $$watchdog >/dev/null 2>&1; else \
+		echo "Docker doesn't seem to be running (no response after 5s) -- start Docker Desktop and try again." >&2; \
+		exit 1; \
+	fi
 	docker run --rm --platform linux/arm64 \
 		-v "$(CURDIR)":/src -w /src \
 		golang:1.26-alpine \

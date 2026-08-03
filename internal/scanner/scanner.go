@@ -628,9 +628,18 @@ func findVideoFile(dir string) (string, error) {
 		if entry.IsDir() {
 			continue
 		}
-		if videoExtSet[strings.ToLower(filepath.Ext(entry.Name()))] {
-			return normalizedPath(dir, entry.Name()), nil
+		if !videoExtSet[strings.ToLower(filepath.Ext(entry.Name()))] {
+			continue
 		}
+		// Skip our own cached audio-track variants (e.g.
+		// "Movie.audiofix.a1.mp4") — otherwise a movie that's had its audio
+		// track switched at least once ends up with these sitting alongside
+		// the real file, and whichever one sorts first gets mistaken for
+		// the movie itself.
+		if transcode.IsGeneratedFile(entry.Name()) {
+			continue
+		}
+		return normalizedPath(dir, entry.Name()), nil
 	}
 	return "", fmt.Errorf("no video file found in %s", dir)
 }
@@ -828,6 +837,14 @@ func (s *Scanner) scanSeason(show models.TVShow, seasonPath string, seasonNumber
 	var pending []pendingEpisode
 	for _, entry := range entries {
 		if entry.IsDir() || !videoExtSet[strings.ToLower(filepath.Ext(entry.Name()))] {
+			continue
+		}
+		// Skip our own cached audio-track variants (e.g.
+		// "Show S01E01.audiofix.a1.mp4") — they keep the original filename's
+		// "SxxExx" as a prefix, so without this they'd match episodeRegex
+		// just like the real file and get scanned in as extra duplicate
+		// episodes once a viewer has switched audio tracks at least once.
+		if transcode.IsGeneratedFile(entry.Name()) {
 			continue
 		}
 		epMatch := episodeRegex.FindStringSubmatch(entry.Name())

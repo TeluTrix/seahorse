@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -60,6 +61,23 @@ func RemuxedPath(videoPath string) string {
 	ext := filepath.Ext(videoPath)
 	base := strings.TrimSuffix(videoPath, ext)
 	return base + ".audiofix" + ext
+}
+
+// generatedFileSuffix matches the tail of any path this package generates
+// itself: RemuxedPath's "*.audiofix.<ext>" and AudioTrackPath's
+// "*.audiofix.a<N>.<ext>". Both keep the original filename as their prefix
+// (so "Show S01E01.mp4" produces "Show S01E01.audiofix.a1.mp4"), which means
+// a naive scan for source video files would otherwise pick these up as
+// distinct episodes/movies of their own.
+var generatedFileSuffix = regexp.MustCompile(`\.audiofix(\.a\d+)?\.[^.]+$`)
+
+// IsGeneratedFile reports whether name (a filename or path) is a cache file
+// produced by RemuxedPath or AudioTrackPath, rather than an original source
+// video. Callers that walk a directory for video files must skip these —
+// otherwise every cached audio-track variant re-appears as a "new" file on
+// the next scan, producing duplicate movie/episode rows for the same title.
+func IsGeneratedFile(name string) bool {
+	return generatedFileSuffix.MatchString(name)
 }
 
 // audioStream describes one audio stream as reported by ffprobe. Index is
